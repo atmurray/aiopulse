@@ -21,8 +21,8 @@ class Hub:
 		self.sequence = 4
 		self.handshake = asyncio.Event()
 		self.event_update = asyncio.Event()
-
 		self.response_task = None
+		self.running = False
 		
 		self.name = "Acmeda Pulse WiFi Hub"
 		self.id = None
@@ -219,16 +219,25 @@ class Hub:
 		_LOGGER.debug("Received broadcast response")
 		pass
 
+	class Receiver:
+		def __init__(self, name, function):
+			self.name = name
+			self.function = function
+
+		def execute(self, target, message):
+			self.function(target, message)
+
+
 	msgmap = {
-		bytes.fromhex('1600') : response_hubinfo,
-		bytes.fromhex('4101') : response_hubinfoend,
-		bytes.fromhex('0101') : response_roomlist,
-		bytes.fromhex('3301') : response_scenelist,
-		bytes.fromhex('2101') : response_rollerlist,
-		bytes.fromhex('0800') : response_authinfo,
-		bytes.fromhex('2301') : response_position,
-		bytes.fromhex('2b01') : response_position,
-		bytes.fromhex('0f00') : response_discover,
+		bytes.fromhex('1600') : Receiver("hub info", response_hubinfo),
+		bytes.fromhex('4101') : Receiver("hub info end", response_hubinfoend),
+		bytes.fromhex('0101') : Receiver("room list", response_roomlist),
+		bytes.fromhex('3301') : Receiver("scene list", response_scenelist),
+		bytes.fromhex('2101') : Receiver("roller list", response_rollerlist),
+		bytes.fromhex('0800') : Receiver("auth info", response_authinfo),
+		bytes.fromhex('2301') : Receiver("position", response_position),
+		bytes.fromhex('2b01') : Receiver("position", response_position),
+		bytes.fromhex('0f00') : Receiver("discover", response_discover),
 	}
 
 	def rec_ping(self, message):
@@ -250,30 +259,28 @@ class Hub:
 			mtype = message[ptr:(ptr+2)]
 			ptr=ptr+2		
 			if mtype in self.msgmap:
-				self.msgmap[mtype](self, message[ptr:])
+				_LOGGER.info("Parsing %s", self.msgmap[mtype].name)
+				self.msgmap[mtype].execute(self, message[ptr:])
 			else:
-				_LOGGER.warning("Unknown message type %s message %s", binascii.hexlify(mtype), binascii.hexlify(message))
-	
-	def rec_null(self, message):
-		""" receive an empty message from the hub """
-		_LOGGER.debug("Received empty message")
-		pass
-	
+				_LOGGER.warning("Unable to parse message %s message %s", binascii.hexlify(mtype), binascii.hexlify(message))
+
 	respmap = {
-		RESPONSE_PING : rec_ping,
-		bytes.fromhex('03000091'): rec_message,	
-		bytes.fromhex('01000091'): rec_message,	
-		bytes.fromhex('02000091'): rec_message,	
-		bytes.fromhex('23000091'): rec_message,	
-		bytes.fromhex('28000091'): rec_message,
-		bytes.fromhex('34000091'): rec_message, # move
-		bytes.fromhex('42000091'): rec_message,	
-		bytes.fromhex('43000091'): rec_message, # account info
-		bytes.fromhex('44000091'): rec_message,	# response move
-		RESPONSE_DISCOVER: rec_message, # response from broadcast discovery
-		bytes.fromhex('5F000091'): rec_message,
-		bytes.fromhex('60000091'): rec_message, # room list
-		bytes.fromhex('65000091'): rec_message, # timer list
+		RESPONSE_PING : Receiver("ping", rec_ping),
+		bytes.fromhex('03000091'): Receiver("acknowledge", rec_message),	
+		bytes.fromhex('01000091'): Receiver("scene list", rec_message),	
+		bytes.fromhex('02000091'): Receiver("roller list", rec_message),	
+		bytes.fromhex('23000091'): Receiver("hub info end", rec_message),	
+		bytes.fromhex('28000091'): Receiver("28000091", rec_message),
+		bytes.fromhex('34000091'): Receiver("moving", rec_message),
+		bytes.fromhex('42000091'): Receiver("unknown", rec_message),	
+		bytes.fromhex('43000091'): Receiver("account info", rec_message),
+		bytes.fromhex('44000091'): Receiver("response move", rec_message),
+		RESPONSE_DISCOVER: Receiver("discover", rec_message),
+		bytes.fromhex('5F000091'): Receiver("hub info", rec_message),
+		bytes.fromhex('60000091'): Receiver("room list", rec_message),
+		bytes.fromhex('65000091'): Receiver("timer list", rec_message),
+		bytes.fromhex('62000091'): Receiver("62000091", rec_message), # Unknown from quentinsf
+		bytes.fromhex('04000091'): Receiver("04000091", rec_message), # Unknown from quentinsf
 	}
 
 	def response_parse(self, response):
@@ -291,10 +298,13 @@ class Hub:
 			message = response[8:]
 	
 		mtype = bytes(message_type)
+		_LOGGER.debug("Received message type: %s message: %s", binascii.hexlify(mtype), binascii.hexlify(message))
 		if mtype in Hub.respmap:
-			Hub.respmap[mtype](self, message)
+			_LOGGER.info("Received %s", Hub.respmap[mtype].name)
+			Hub.respmap[mtype].execute(self, message)
 		else:
-			_LOGGER.warning("Unknown type: %s message: %s", binascii.hexlify(mtype), binascii.hexlify(message))
+			_LOGGER.warning("Received unknown message type: %s message: %s", binascii.hexlify(mtype), binascii.hexlify(message))
+			self.rec_message(message)
 		
 	async def response_parser(self):
 		""" receive a response from the hub and work out what message it is """
@@ -338,8 +348,6 @@ class Hub:
 		await self.get_response(RESPONSE_UNKNOWN1 + bytes.fromhex('06') + self.topic + bytes.fromhex('16000f0002000000000000000c000600120311073816ff9d'))
 		await self.get_response(RESPONSE_SETID)
 
-		self.response_task = asyncio.create_task(self.response_parser())
-
 		self.handshake.set()
 
 		_LOGGER.info("Handshake complete")
@@ -352,7 +360,6 @@ class Hub:
 		if not self.handshake.is_set():
 			raise NotConnectedException
 		await self.send_payload(COMMAND_GET_HUB_INFO, bytes.fromhex('F000'), bytes.fromhex('000000000000FF'))
-		await self.event_update.wait()
 		_LOGGER.info("Hub update command sent")
 
 	async def send_payload(self, command, message_type, message):
@@ -363,3 +370,25 @@ class Hub:
 		command_header = HEADER + command + bytes.fromhex('05') + self.topic
 		length = len(data) + 1 #bytes.fromhex('0C00') 
 		self.protocol.send(command_header + pack_int(length, 2) + data + checksum)
+
+	async def run(self):
+		if self.running:
+			_LOGGER.warn("Already running")
+			return
+		self.running = True
+		while self.running:
+			await self.connect()
+			await self.do_handshake()
+			await self.update()
+			await self.response_parser()
+		_LOGGER.debug("Stopped")
+
+	async def stop(self):
+		if not self.running:
+			_LOGGER.warn("Already stopped")
+			return		
+		_LOGGER.debug("Stopping")
+		self.running = False
+		await self.protocol.close()
+
+

@@ -9,10 +9,7 @@ async def discover(prompt):
 	print("Starting hub discovery")
 	async for hub in aiopulse.Hub.discover():
 		if hub.id not in prompt.hubs:
-			await hub.connect()
-			await hub.do_handshake()
-			await hub.handshake.wait()
-			await hub.update()
+			#asyncio.create_task(hub.run())
 			prompt.add_hub(hub)
 
 class HubPrompt(cmd.Cmd):
@@ -41,7 +38,7 @@ class HubPrompt(cmd.Cmd):
 		self.event_loop.create_task(discover(self))
 
 	def do_update(self, args):
-		for hub in self.hubs:
+		for hub in self.hubs.values():
 			print("Sending update command to hub {}".format(hub.id))
 			self.event_loop.create_task(hub.update())
 			
@@ -85,6 +82,14 @@ class HubPrompt(cmd.Cmd):
 			print("Sending blind stop to {}".format(roller.name))
 			self.event_loop.create_task(roller.move_stop())
 
+	def do_connect(self, sargs):
+		for hub in self.hubs.values():
+			self.event_loop.create_task(hub.run())
+
+	def do_disconnect(self, sargs):
+		for hub in self.hubs.values():
+			self.event_loop.create_task(hub.stop())
+
 	def do_exit(self, arg):
 		print("Exiting")
 		self.running = False
@@ -96,7 +101,7 @@ async def worker(prompt):
 
 async def main():
 	""" test code """
-	logging.basicConfig(level=logging.WARN)
+	logging.basicConfig(level=logging.INFO)
 
 	event_loop = asyncio.get_running_loop()
 

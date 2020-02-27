@@ -12,6 +12,8 @@ For now, from the folder containing setup.py run `python setup.py install`.
 | Command                               | Description               |
 |---------------------------------------|---------------------------|
 |discover                               | Find and connect to any hubs on the local network (uses udp broadcast discovery)|
+|connect                                | Connect to all hubs and trigger update|
+|disconnect                             | Disconnect all hubs|
 |update                                 | Refresh all information from hub|
 |list                                   | List currently connected hubs and their blinds, use to get the [hub id] and [blind id] for the following commands.|
 |open [hub id] [blind id]               | Open blind|
