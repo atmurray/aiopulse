@@ -158,7 +158,7 @@ class Hub:
 			_, ptr = unpack_bytes(message, ptr, 2)
 			scene_name, ptr = unpack_string(message, ptr)
 			_, ptr = unpack_bytes(message, ptr, 7)
-			_, ptr = unpack_string(message, ptr)
+			_, ptr = unpack_bytes(message, ptr)
 			_, ptr = unpack_bytes(message, ptr, 2)
 			if not scene_id in self.scenes:
 				self.scenes[scene_id] = Scene(self, scene_id)
