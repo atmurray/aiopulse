@@ -38,6 +38,8 @@ class Hub:
 		self.rooms = {}
 		self.scenes = {}
 
+		self.handshake.clear()
+
 	@staticmethod
 	async def discover(timeout=5):
 		""" Use a broadcast udp packet to find hubs on the lan """
@@ -68,8 +70,7 @@ class Hub:
 							try:
 								hub = Hub(addr[0])
 								await hub.connect()
-								await hub.do_handshake()
-								await hub.protocol.close()
+								await hub.disconnect()
 								hubs[addr] = hub
 								yield hub
 							except NotConnectedException:
@@ -84,11 +85,50 @@ class Hub:
 		""" try and connect to the hub """
 		if host:
 			self.host = host
-		
+
 		await self.protocol.connect(self.host)
 		
-		self.handshake.clear()
+		if self.handshake.is_set():
+			_LOGGER.warn("Handshake already completed")
+			return False
+
+		if self.protocol.is_udp: # udp
+			#self.send_command(COMMAND_DISCOVER)
+			#response = await self.get_response()
+			self.send_command(COMMAND_CONNECT)
+			raw_id = await self.get_response(RESPONSE_CONNECT)
+		else: # TCP
+			self.send_command(COMMAND_CONNECT)
+			raw_id = await self.get_response(RESPONSE_CONNECT)
+
+		self.id = raw_id[2:].decode("utf-8")
+
+		self.send_command(COMMAND_LOGIN + raw_id)
+		response = await self.get_response(RESPONSE_LOGIN)
+
+		if response[0] != 0:
+			raise InvalidResponseException
+
+		self.send_command(COMMAND_SETID, bytes.fromhex('16000e0001000000000000000c000600120311073816ff9b'))
+		await self.get_response(RESPONSE_SETID)
+
+		self.send_command(COMMAND_UNKNOWN1, bytes.fromhex('1100150002000000000000006002010030ffa9'))
+		await self.get_response(RESPONSE_UNKNOWN1 + bytes.fromhex('06') + self.topic + bytes.fromhex('16000f0002000000000000000c000600120311073816ff9d'))
+		await self.get_response(RESPONSE_SETID)
+
+		_LOGGER.info("Handshake complete")
+		self.handshake.set()
+				
 		return True
+
+	async def disconnect(self):
+		_LOGGER.debug("Disconnecting")
+		await self.protocol.close()
+		if not self.handshake.is_set():
+			_LOGGER.warn("Not connected")
+			return
+		self.handshake.clear()
+		_LOGGER.info("Disconnected")
 				
 	def send_command(self, command, message=None):
 		""" send a command to the hub """
@@ -227,7 +267,6 @@ class Hub:
 		def execute(self, target, message):
 			self.function(target, message)
 
-
 	msgmap = {
 		bytes.fromhex('1600') : Receiver("hub info", response_hubinfo),
 		bytes.fromhex('4101') : Receiver("hub info end", response_hubinfoend),
@@ -270,7 +309,7 @@ class Hub:
 		bytes.fromhex('01000091'): Receiver("scene list", rec_message),	
 		bytes.fromhex('02000091'): Receiver("roller list", rec_message),	
 		bytes.fromhex('23000091'): Receiver("hub info end", rec_message),	
-		bytes.fromhex('28000091'): Receiver("28000091", rec_message),
+		bytes.fromhex('28000091'): Receiver("discover", rec_message),
 		bytes.fromhex('34000091'): Receiver("moving", rec_message),
 		bytes.fromhex('42000091'): Receiver("unknown", rec_message),	
 		bytes.fromhex('43000091'): Receiver("account info", rec_message),
@@ -309,6 +348,7 @@ class Hub:
 	async def response_parser(self):
 		""" receive a response from the hub and work out what message it is """
 		try:
+			_LOGGER.info("Starting response parser")
 			while True:
 				try:
 					with async_timeout.timeout(30):
@@ -322,48 +362,17 @@ class Hub:
 		except NotConnectedException:
 			_LOGGER.info("Disconnected, stopping parser")
 
-	async def do_handshake(self):
-		""" complete handshake with the hub """
-		if self.protocol.is_udp: # udp
-			#self.send_command(COMMAND_DISCOVER)
-			#response = await self.get_response()
-			self.send_command(COMMAND_CONNECT)
-			raw_id = await self.get_response(RESPONSE_CONNECT)
-		else: # TCP
-			self.send_command(COMMAND_CONNECT)
-			raw_id = await self.get_response(RESPONSE_CONNECT)
-
-		self.id = raw_id[2:].decode("utf-8")
-
-		self.send_command(COMMAND_LOGIN + raw_id)
-		response = await self.get_response(RESPONSE_LOGIN)
-
-		if response[0] != 0:
-			raise InvalidResponseException
-
-		self.send_command(COMMAND_SETID, bytes.fromhex('16000e0001000000000000000c000600120311073816ff9b'))
-		await self.get_response(RESPONSE_SETID)
-
-		self.send_command(COMMAND_UNKNOWN1, bytes.fromhex('1100150002000000000000006002010030ffa9'))
-		await self.get_response(RESPONSE_UNKNOWN1 + bytes.fromhex('06') + self.topic + bytes.fromhex('16000f0002000000000000000c000600120311073816ff9d'))
-		await self.get_response(RESPONSE_SETID)
-
-		self.handshake.set()
-
-		_LOGGER.info("Handshake complete")
-
-		return True
-
 	async def update(self):
 		""" update all hub information (includes scenes, rooms, and rollers) """
 		self.event_update.clear()
-		if not self.handshake.is_set():
-			raise NotConnectedException
 		await self.send_payload(COMMAND_GET_HUB_INFO, bytes.fromhex('F000'), bytes.fromhex('000000000000FF'))
 		_LOGGER.info("Hub update command sent")
 
 	async def send_payload(self, command, message_type, message):
 		""" send payload to the hub """
+		if not self.running:
+			raise NotRunningException		
+		await self.handshake.wait()		
 		data = message_type + pack_int(self.sequence,2) + message
 		checksum = bytes([sum(data) & 0xFF])
 		self.sequence += 2
@@ -377,10 +386,20 @@ class Hub:
 			return
 		self.running = True
 		while self.running:
-			await self.connect()
-			await self.do_handshake()
-			await self.update()
-			await self.response_parser()
+			try:
+				_LOGGER.info("Connecting")
+				await self.connect()
+			except InvalidResponseException:
+				_LOGGER.warn("Connect failed")		
+				continue
+			try:
+				await self.update()
+				await self.response_parser()
+			except InvalidResponseException:
+				_LOGGER.warn("Connect failed")
+			if self.running:
+				await self.disconnect()
+				await asyncio.sleep(5)
 		_LOGGER.debug("Stopped")
 
 	async def stop(self):
@@ -389,6 +408,6 @@ class Hub:
 			return		
 		_LOGGER.debug("Stopping")
 		self.running = False
-		await self.protocol.close()
+		await self.disconnect()
 
 

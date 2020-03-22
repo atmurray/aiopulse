@@ -9,7 +9,6 @@ async def discover(prompt):
 	print("Starting hub discovery")
 	async for hub in aiopulse.Hub.discover():
 		if hub.id not in prompt.hubs:
-			#asyncio.create_task(hub.run())
 			prompt.add_hub(hub)
 
 class HubPrompt(cmd.Cmd):

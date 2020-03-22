@@ -104,6 +104,10 @@ class HubTransportTcp(HubTransportBase):
 		if host:
 			self.host = host		
  
+		if self.writer:
+			_LOGGER.warn("Already connected.")
+			return
+
 		loop = asyncio.get_event_loop()
 		self.reader = asyncio.StreamReader(loop=loop)
 		#super().__init__(self.reader)
@@ -114,8 +118,12 @@ class HubTransportTcp(HubTransportBase):
 
 	async def close(self):
 		""" close the connection """
+		if not self.writer:
+			_LOGGER.error("Not connected")
+
 		self.writer.close()
 		await self.writer.wait_closed()
+		self.writer = None
 		_LOGGER.info("TCP connection closed.")
 
 	def send(self, buffer):
