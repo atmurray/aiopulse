@@ -3,8 +3,21 @@ import logging
 
 from aiopulse.hub import Hub
 from aiopulse.elements import Roller, Room, Scene
+from aiopulse.errors import (
+    NotConnectedException,
+    NotRunningException,
+    InvalidResponseException,
+)
 
-__all__ = ["Hub", "Roller", "Room", "Scene"]
+__all__ = [
+    "Hub",
+    "Roller",
+    "Room",
+    "Scene",
+    "NotConnectedException",
+    "NotRunningException",
+    "InvalidResponseException",
+]
 __version__ = "0.2.1"
 __author__ = "Alan Murray"
 
