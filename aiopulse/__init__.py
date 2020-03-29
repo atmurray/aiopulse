@@ -18,7 +18,7 @@ __all__ = [
     "NotRunningException",
     "InvalidResponseException",
 ]
-__version__ = "0.2.1"
+__version__ = "0.2.3"
 __author__ = "Alan Murray"
 
 _LOGGER = logging.getLogger(__name__)
