@@ -24,20 +24,6 @@ repos:
           - flake8-docstrings==1.5.0
           - pydocstyle==5.0.2
         files: ^((aiopulse)/.+)?[^/]+\.py$
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.6.2
-    hooks:
-      - id: bandit
         args:
-          - --quiet
-          - --format=custom
-          - --configfile=tests/bandit.yaml
-        files: ^(aiopulse)/.+\.py$
-  - repo: https://github.com/pre-commit/mirrors-isort
-    rev: v4.3.21
-    hooks:
-      - id: isort
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.4.0
-    hooks:
-      - id: check-json
+          - --max-line-length=88
+          - --ignore=D401,E203,W503
