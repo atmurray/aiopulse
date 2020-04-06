@@ -11,6 +11,7 @@ class Roller:
         self.hub = hub
         self.id = roller_id
         self.name = None
+        self.type = None
         self.serial = None
         self.room_id = None
         self.room = None
@@ -22,13 +23,14 @@ class Roller:
     def __str__(self):
         """Returns string representation of roller."""
         return (
-            "Name: {} ID: {} Serial: {} Room: {} Closed %: {} Battery %: {}"
+            "Name: {} ID: {} Serial: {} Room: {} Type: {} Closed %: {} Battery %: {}"
             " Flags: {:08b}"
         ).format(
             self.name,
             self.id,
             self.serial,
             self.room.name,
+            self.type,
             self.closed_percent,
             self.battery,
             self.flags,

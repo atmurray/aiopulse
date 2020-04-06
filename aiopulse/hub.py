@@ -225,6 +225,44 @@ class Hub:
         _LOGGER.debug("Received timer list")
         pass
 
+    def response_roller_updated(self, message):
+        """Receive change of roller information."""
+        _LOGGER.debug("Received update of roller information")
+        ptr = 2  # sequence?
+        ptr += 6
+        ptr += 2  # unknown field
+        room_id, ptr = utils.unpack_string(message, ptr)
+        ptr += 4  # unknown field
+        roller_type, ptr = utils.unpack_int(message, ptr, 1)
+        ptr += 2  # unknown field
+        roller_name, ptr = utils.unpack_string(message, ptr)
+        ptr += 10  # unknown field
+        roller_id, ptr = utils.unpack_int(message, ptr, 6)
+        ptr += 4
+        # battery level seems to be out of 25, convert to percentage
+        roller_battery, ptr = utils.unpack_int(message, ptr, 1)
+        roller_battery *= 4
+        ptr += 5  # unknown field
+        roller_percent, ptr = utils.unpack_int(message, ptr, 1)
+        roller_flags, ptr = utils.unpack_int(message, ptr, 1)
+        ptr += 2  # checksum
+        if roller_id not in self.rollers:
+            self.rollers[roller_id] = elements.Roller(self, roller_id)
+        self.rollers[roller_id].name = roller_name
+        # doesn't seem to come through in update
+        # self.rollers[roller_id].serial = roller_serial
+        self.rollers[roller_id].room_id = room_id
+        self.rollers[roller_id].type = roller_type
+        if room_id in self.rooms:
+            self.rollers[roller_id].room = self.rooms[room_id]
+        else:
+            self.rollers[roller_id].room = None
+        self.rollers[roller_id].battery = roller_battery
+        self.rollers[roller_id].closed_percent = roller_percent
+        self.rollers[roller_id].flags = roller_flags
+        self.rollers[roller_id].notify_callback()
+        self.notify_callback()
+
     def response_rollerlist(self, message):
         """Receive roller blind list."""
         _LOGGER.debug("Received roller list")
@@ -236,7 +274,9 @@ class Hub:
             roller_id, ptr = utils.unpack_int(message, ptr, 6)
             ptr += 2  # unknown field
             room_id, ptr = utils.unpack_string(message, ptr)
-            ptr += 7  # unknown field
+            ptr += 4  # unknown field
+            roller_type, ptr = utils.unpack_int(message, ptr, 1)
+            ptr += 2  # unknown field
             roller_name, ptr = utils.unpack_string(message, ptr)
             ptr += 8  # unknown field
             roller_serial, ptr = utils.unpack_string(message, ptr)
@@ -252,6 +292,7 @@ class Hub:
             self.rollers[roller_id].name = roller_name
             self.rollers[roller_id].serial = roller_serial
             self.rollers[roller_id].room_id = room_id
+            self.rollers[roller_id].type = roller_type
             if room_id in self.rooms:
                 self.rollers[roller_id].room = self.rooms[room_id]
             else:
@@ -280,6 +321,18 @@ class Hub:
             self.rollers[roller_id].flags = roller_flags
             self.rollers[roller_id].notify_callback()
 
+    def response_calibration(self, message):
+        """Receive change of roller calibration information."""
+        _LOGGER.debug("Received change of calibration position")
+        ptr = 12
+        roller_id, ptr = utils.unpack_int(message, ptr, 6)
+        ptr += 5  # letter A and then 4 bytes
+        ptr += 5  # letter B and then 4 bytes
+        ptr += 5  # letter C and then 4 bytes
+        ptr += 5  # unknown
+        ptr += 8  # unknown
+        ptr += 2  # checksum
+
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
         _LOGGER.debug("Received broadcast response")
@@ -305,7 +358,8 @@ class Hub:
         bytes.fromhex("2101"): Receiver("roller list", response_rollerlist),
         bytes.fromhex("0800"): Receiver("auth info", response_authinfo),
         bytes.fromhex("2301"): Receiver("position", response_position),
-        bytes.fromhex("2b01"): Receiver("position", response_position),
+        bytes.fromhex("2501"): Receiver("roller info updated", response_roller_updated),
+        bytes.fromhex("2b01"): Receiver("calibration", response_calibration),
         bytes.fromhex("0f00"): Receiver("discover", response_discover),
     }
 
@@ -348,6 +402,9 @@ class Hub:
         bytes.fromhex("43000091"): Receiver("account info", rec_message),
         bytes.fromhex("44000091"): Receiver("response move", rec_message),
         const.RESPONSE_DISCOVER: Receiver("discover", rec_message),
+        bytes.fromhex("56000091"): Receiver("roller room change", rec_message),
+        bytes.fromhex("57000091"): Receiver("roller name change", rec_message),
+        bytes.fromhex("59000091"): Receiver("roller name change", rec_message),
         bytes.fromhex("5b000091"): Receiver(
             "room list", rec_message
         ),  # after adding second room
