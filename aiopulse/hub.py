@@ -41,6 +41,11 @@ class Hub:
         self.scenes = {}
 
         self.handshake.clear()
+        self.update_callback = None
+
+    def set_callback(self, callback):
+        """Add a callback for hub updates."""
+        self.update_callback = callback
 
     @staticmethod
     async def discover(timeout=5):
@@ -143,6 +148,11 @@ class Hub:
         self.handshake.clear()
         _LOGGER.info("Disconnected")
 
+    def notify_callback(self):
+        """Tell callback that hub has been updated."""
+        if self.update_callback:
+            self.update_callback()
+
     def send_command(self, command, message=None):
         """Send a command to the hub."""
         if message:
@@ -182,6 +192,7 @@ class Hub:
         """Receive end of hub information."""
         _LOGGER.debug("Received end of hub information")
         self.event_update.set()
+        self.notify_callback()
 
     def response_roomlist(self, message):
         """Receive room list."""
