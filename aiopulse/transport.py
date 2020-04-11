@@ -128,6 +128,7 @@ class HubTransportTcp(HubTransportBase):
         """Close the connection."""
         if not self.writer:
             _LOGGER.error("Not connected")
+            return
 
         self.writer.close()
         await self.writer.wait_closed()

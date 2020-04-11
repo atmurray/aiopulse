@@ -1,10 +1,16 @@
 """Demo."""
 import asyncio
 import cmd
-import concurrent
 import logging
 
 import aiopulse
+import functools
+
+from typing import (
+    Any,
+    Callable,
+    Optional,
+)
 
 
 async def discover(prompt):
@@ -25,10 +31,53 @@ class HubPrompt(cmd.Cmd):
         self.running = True
         super().__init__()
 
+    def add_job(self, target: Callable[..., Any], *args: Any) -> None:
+        """Add job to the executor pool.
+
+        target: target to call.
+        args: parameters for method to call.
+        """
+        if target is None:
+            raise ValueError("Don't call add_job with None")
+        self.event_loop.call_soon_threadsafe(self.async_add_job, target, *args)
+
+    def async_add_job(
+        self, target: Callable[..., Any], *args: Any
+    ) -> Optional[asyncio.Future]:
+        """Add a job from within the event loop.
+
+        This method must be run in the event loop.
+
+        target: target to call.
+        args: parameters for method to call.
+        """
+        task = None
+
+        # Check for partials to properly determine if coroutine function
+        check_target = target
+        while isinstance(check_target, functools.partial):
+            check_target = check_target.func
+
+        if asyncio.iscoroutine(check_target):
+            task = self.event_loop.create_task(target)  # type: ignore
+        elif asyncio.iscoroutinefunction(check_target):
+            task = self.event_loop.create_task(target(*args))
+        else:
+            task = self.event_loop.run_in_executor(  # type: ignore
+                None, target, *args
+            )
+
+        return task
+
     def add_hub(self, hub):
         """Add a hub to the prompt."""
         self.hubs[hub.id] = hub
+        hub.callback_subscribe(self.hub_update_callback)
         print("Hub added to prompt")
+
+    def hub_update_callback(self):
+        """Called when a hub reports that its information is updated."""
+        print("Hub updated")
 
     def _get_roller(self, args):
         """Return roller based on string argument."""
@@ -42,13 +91,13 @@ class HubPrompt(cmd.Cmd):
 
     def do_discover(self, args):
         """Command to discover all hubs on the local network."""
-        self.event_loop.create_task(discover(self))
+        self.add_job(discover, self)
 
     def do_update(self, args):
         """Command to ask all hubs to send their information."""
         for hub in self.hubs.values():
             print("Sending update command to hub {}".format(hub.id))
-            self.event_loop.create_task(hub.update())
+            self.add_job(hub.update)
 
     def do_list(self, args):
         """Command to list all hubs, rollers, rooms, and scenes."""
@@ -73,7 +122,7 @@ class HubPrompt(cmd.Cmd):
         if roller:
             position = int(args[2])
             print("Sending blind move to {}".format(roller.name))
-            self.event_loop.create_task(roller.move_to(position))
+            self.add_job(roller.move_to, position)
 
     def do_close(self, sargs):
         """Command to close a roller."""
@@ -81,7 +130,7 @@ class HubPrompt(cmd.Cmd):
         roller = self._get_roller(args)
         if roller:
             print("Sending blind down to {}".format(roller.name))
-            self.event_loop.create_task(roller.move_down())
+            self.add_job(roller.move_down)
 
     def do_open(self, sargs):
         """Command to open a roller."""
@@ -89,7 +138,7 @@ class HubPrompt(cmd.Cmd):
         roller = self._get_roller(args)
         if roller:
             print("Sending blind up to {}".format(roller.name))
-            self.event_loop.create_task(roller.move_up())
+            self.add_job(roller.move_up)
 
     def do_stop(self, sargs):
         """Command to stop a moving roller."""
@@ -97,17 +146,17 @@ class HubPrompt(cmd.Cmd):
         roller = self._get_roller(args)
         if roller:
             print("Sending blind stop to {}".format(roller.name))
-            self.event_loop.create_task(roller.move_stop())
+            self.add_job(roller.move_stop)
 
     def do_connect(self, sargs):
         """Command to connect all hubs."""
         for hub in self.hubs.values():
-            self.event_loop.create_task(hub.run())
+            self.add_job(hub.run)
 
     def do_disconnect(self, sargs):
         """Command to disconnect all connected hubs."""
         for hub in self.hubs.values():
-            self.event_loop.create_task(hub.stop())
+            self.add_job(hub.stop)
 
     def do_exit(self, arg):
         """Command to exit."""
@@ -116,26 +165,16 @@ class HubPrompt(cmd.Cmd):
         return True
 
 
-async def worker(prompt):
-    """Async worker thread that sleeps and wakes up periodically."""
-    while prompt.running:
-        await asyncio.sleep(1)
-
-
 async def main():
     """Test code."""
     logging.basicConfig(level=logging.INFO)
 
     event_loop = asyncio.get_running_loop()
 
-    executor = concurrent.futures.ThreadPoolExecutor()
-    event_loop.set_default_executor(executor)
-
     prompt = HubPrompt(event_loop)
     prompt.prompt = "> "
 
     tasks = [
-        worker(prompt),
         event_loop.run_in_executor(None, prompt.cmdloop),
     ]
 

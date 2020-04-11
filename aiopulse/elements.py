@@ -1,4 +1,6 @@
 """Elements that hang off the hub."""
+from typing import List, Callable
+
 import aiopulse.utils as utils
 import aiopulse.const as const
 
@@ -18,7 +20,7 @@ class Roller:
         self.battery = None
         self.closed_percent = None
         self.flags = 0
-        self.update_callback = None
+        self.update_callbacks: List[Callable] = []
 
     def __str__(self):
         """Returns string representation of roller."""
@@ -36,14 +38,19 @@ class Roller:
             self.flags,
         )
 
-    def set_callback(self, callback):
-        """Add a callback for device updates."""
-        self.update_callback = callback
+    def callback_subscribe(self, callback):
+        """Add a callback for hub updates."""
+        self.update_callbacks.append(callback)
+
+    def callback_unsubscribe(self, callback):
+        """Remove a callback for hub updates."""
+        if callback in self.update_callbacks:
+            self.update_callbacks.remove(callback)
 
     def notify_callback(self):
         """Tell callback that device has been updated."""
-        if self.update_callback:
-            self.update_callback()
+        for callback in self.update_callbacks:
+            self.hub.async_add_job(callback)
 
     async def move_to(self, percent):
         """Send command to move the roller to a percentage closed."""
@@ -106,20 +113,25 @@ class Room:
         self.id = room_id
         self.icon = None
         self.name = None
-        self.update_callback = None
+        self.update_callbacks: List[Callable] = []
 
     def __str__(self):
         """Returns string representation of roller."""
         return "Name: {} ID: {} Icon: {}".format(self.name, self.id[0:4], self.icon)
 
-    def set_callback(self, callback):
-        """Add a callback for device updates."""
-        self.update_callback = callback
+    def callback_subscribe(self, callback):
+        """Add a callback for hub updates."""
+        self.update_callbacks.append(callback)
+
+    def callback_unsubscribe(self, callback):
+        """Remove a callback for hub updates."""
+        if callback in self.update_callbacks:
+            self.update_callbacks.remove(callback)
 
     def notify_callback(self):
         """Tell callback that device has been updated."""
-        if self.update_callback:
-            self.update_callback()
+        for callback in self.update_callbacks:
+            self.hub.async_add_job(callback)
 
     async def move_to(self, percent):
         """Send command to move the roller to a percentage closed."""

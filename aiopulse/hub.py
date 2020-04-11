@@ -2,6 +2,13 @@
 import asyncio
 import binascii
 import logging
+from typing import (
+    Any,
+    List,
+    Callable,
+    Optional,
+)
+import functools
 
 import async_timeout
 
@@ -17,8 +24,11 @@ _LOGGER = logging.getLogger(__name__)
 class Hub:
     """Representation of an Acmeda Pulse Hub."""
 
-    def __init__(self, host=None):
+    def __init__(
+        self, host=None, loop: Optional[asyncio.events.AbstractEventLoop] = None
+    ):
         """Init the hub."""
+        self.loop: asyncio.events.AbstractEventLoop = (loop or asyncio.get_event_loop())
         self.topic = str.encode("Smart_Id1_y:")
         self.sequence = 4
         self.handshake = asyncio.Event()
@@ -41,11 +51,49 @@ class Hub:
         self.scenes = {}
 
         self.handshake.clear()
-        self.update_callback = None
+        self.update_callbacks: List[Callable] = []
 
-    def set_callback(self, callback):
+    def callback_subscribe(self, callback):
         """Add a callback for hub updates."""
-        self.update_callback = callback
+        self.update_callbacks.append(callback)
+
+    def callback_unsubscribe(self, callback):
+        """Remove a callback for hub updates."""
+        if callback in self.update_callbacks:
+            self.update_callbacks.remove(callback)
+
+    def async_add_job(
+        self, target: Callable[..., Any], *args: Any
+    ) -> Optional[asyncio.Future]:
+        """Add a job from within the event loop.
+
+        This method must be run in the event loop.
+
+        target: target to call.
+        args: parameters for method to call.
+        """
+        task = None
+
+        # Check for partials to properly determine if coroutine function
+        check_target = target
+        while isinstance(check_target, functools.partial):
+            check_target = check_target.func
+
+        if asyncio.iscoroutine(check_target):
+            task = self.loop.create_task(target)  # type: ignore
+        elif asyncio.iscoroutinefunction(check_target):
+            task = self.loop.create_task(target(*args))
+        else:
+            task = self.loop.run_in_executor(  # type: ignore
+                None, target, *args
+            )
+
+        return task
+
+    def notify_callback(self):
+        """Tell callback that the hub has been updated."""
+        for callback in self.update_callbacks:
+            self.async_add_job(callback)
 
     @staticmethod
     async def discover(timeout=5):
@@ -147,11 +195,6 @@ class Hub:
             return
         self.handshake.clear()
         _LOGGER.info("Disconnected")
-
-    def notify_callback(self):
-        """Tell callback that hub has been updated."""
-        if self.update_callback:
-            self.update_callback()
 
     def send_command(self, command, message=None):
         """Send a command to the hub."""
