@@ -120,7 +120,7 @@ class Hub:
                             pass
 
                         if addr and addr not in hubs:
-                            _LOGGER.info("Discovered hub %s:%s", addr[0], addr[1])
+                            _LOGGER.info(f"{addr[0]}: Discovered hub on port {addr[1]}")
                             try:
                                 hub = Hub(addr[0])
                                 await hub.connect()
@@ -128,9 +128,13 @@ class Hub:
                                 hubs[addr] = hub
                                 yield hub
                             except errors.CannotConnectException:
-                                _LOGGER.warning("Couldn't connect to discovered hub")
+                                _LOGGER.warning(
+                                    f"{hub.host}: Couldn't connect to discovered hub"
+                                )
                             except errors.InvalidResponseException:
-                                _LOGGER.warning("Couldn't interrogate discovered hub")
+                                _LOGGER.warning(
+                                    f"{hub.host}: Couldn't interrogate discovered hub"
+                                )
         except asyncio.TimeoutError:
             pass
         _LOGGER.info("Discovery complete")
@@ -148,7 +152,7 @@ class Hub:
             raise errors.CannotConnectException
 
         if self.handshake.is_set():
-            _LOGGER.warning("Handshake already completed")
+            _LOGGER.warning(f"{self.host} Handshake already completed")
             return False
 
         if self.protocol.is_udp:  # udp
@@ -186,17 +190,17 @@ class Hub:
         )
         await self.get_response(const.RESPONSE_SETID)
 
-        _LOGGER.info("Handshake complete")
+        _LOGGER.info(f"{self.host}: Handshake complete")
         self.handshake.set()
 
         return True
 
     async def disconnect(self):
         """Disconnect from the hub."""
-        _LOGGER.debug("Disconnecting")
+        _LOGGER.debug(f"{self.host}: Disconnecting")
         await self.protocol.close()
         self.handshake.clear()
-        _LOGGER.info("Disconnected")
+        _LOGGER.info(f"{self.host}: Disconnected")
 
     def send_command(self, command, message=None):
         """Send a command to the hub."""
@@ -221,7 +225,7 @@ class Hub:
 
     def response_hubinfo(self, message):
         """Receive start of hub information."""
-        _LOGGER.debug("Received hub information")
+        _LOGGER.debug(f"{self.host}: Received hub information")
         ptr = 10
         self.firmware_name, ptr = utils.unpack_string(message, ptr)
         ptr += 2
@@ -235,13 +239,13 @@ class Hub:
 
     def response_hubinfoend(self, message):
         """Receive end of hub information."""
-        _LOGGER.debug("Received end of hub information")
+        _LOGGER.debug(f"{self.host}: Received end of hub information")
         self.event_update.set()
         self.notify_callback()
 
     def response_roomlist(self, message):
         """Receive room list."""
-        _LOGGER.debug("Received room list")
+        _LOGGER.debug(f"{self.host}: Received room list")
         ptr = 12
         room_count, ptr = utils.unpack_int(message, ptr, 1)
         for _ in range(room_count):
@@ -258,7 +262,7 @@ class Hub:
 
     def response_scenelist(self, message):
         """Receive scene list."""
-        _LOGGER.debug("Received scene list")
+        _LOGGER.debug(f"{self.host}: Received scene list")
         ptr = 12
         scene_count, ptr = utils.unpack_int(message, ptr, 1)
         ptr += 2
@@ -278,12 +282,12 @@ class Hub:
 
     def response_timerlist(self, message):
         """Receive timer list."""
-        _LOGGER.debug("Received timer list")
+        _LOGGER.debug(f"{self.host}: Received timer list")
         pass
 
     def response_roller_updated(self, message):
         """Receive change of roller information."""
-        _LOGGER.debug("Received update of roller information")
+        _LOGGER.debug(f"{self.host}: Received update of roller information")
         ptr = 2  # sequence?
         ptr += 6
         ptr += 2  # unknown field
@@ -321,7 +325,7 @@ class Hub:
 
     def response_rollerlist(self, message):
         """Receive roller blind list."""
-        _LOGGER.debug("Received roller list")
+        _LOGGER.debug(f"{self.host}: Received roller list")
         ptr = 2  # sequence?
         ptr += 10
         roller_count, ptr = utils.unpack_int(message, ptr, 1)
@@ -360,13 +364,13 @@ class Hub:
 
     def response_authinfo(self, message):
         """Receive acmeda account information."""
-        _LOGGER.debug("Received account information")
+        _LOGGER.debug(f"{self.host}: Received account information")
         ptr = 15
         _, ptr = utils.unpack_string(message, ptr)
 
     def response_position(self, message):
         """Receive change of roller position information."""
-        _LOGGER.debug("Received change of roller position")
+        _LOGGER.debug(f"{self.host}: Received change of roller position")
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         ptr += 10
@@ -379,7 +383,7 @@ class Hub:
 
     def response_calibration(self, message):
         """Receive change of roller calibration information."""
-        _LOGGER.debug("Received change of calibration position")
+        _LOGGER.debug(f"{self.host}: Received change of calibration position")
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         ptr += 5  # letter A and then 4 bytes
@@ -391,7 +395,7 @@ class Hub:
 
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
-        _LOGGER.debug("Received broadcast response")
+        _LOGGER.debug(f"{self.host}: Received broadcast response")
         pass
 
     class Receiver:
@@ -421,7 +425,7 @@ class Hub:
 
     def rec_ping(self, message):
         """Receive a ping from the hub."""
-        _LOGGER.debug("Received hub ping response")
+        _LOGGER.debug(f"{self.host}: Received hub ping response")
         pass
 
     def rec_message(self, message):
@@ -437,11 +441,11 @@ class Hub:
             mtype = message[ptr : (ptr + 2)]
             ptr = ptr + 2
             if mtype in self.msgmap:
-                _LOGGER.info("Parsing %s", self.msgmap[mtype].name)
+                _LOGGER.debug(f"{self.host}: Parsing %s", self.msgmap[mtype].name)
                 self.msgmap[mtype].execute(self, message[ptr:])
             else:
                 _LOGGER.warning(
-                    "Unable to parse message %s message %s",
+                    f"{self.host}: Unable to parse message %s message %s",
                     binascii.hexlify(mtype),
                     binascii.hexlify(message),
                 )
@@ -478,7 +482,9 @@ class Hub:
     def response_parse(self, response):
         """Decode response."""
         if response[0:4] != bytes.fromhex("00000003"):
-            _LOGGER.warning("Unknown response: %s", binascii.hexlify(response[0:4]))
+            _LOGGER.warning(
+                f"{self.host}: Unknown response: %s", binascii.hexlify(response[0:4])
+            )
             raise errors.InvalidResponseException
 
         message_type = response[4:8]
@@ -491,16 +497,16 @@ class Hub:
 
         mtype = bytes(message_type)
         _LOGGER.debug(
-            "Received message type: %s message: %s",
+            f"{self.host}: Received message type: %s message: %s",
             binascii.hexlify(mtype),
             binascii.hexlify(message),
         )
         if mtype in Hub.respmap:
-            _LOGGER.info("Received %s", Hub.respmap[mtype].name)
+            _LOGGER.debug(f"{self.host}: Received %s", Hub.respmap[mtype].name)
             Hub.respmap[mtype].execute(self, message)
         else:
             _LOGGER.warning(
-                "Received unknown message type: %s message: %s",
+                f"{self.host}: Received unknown message type: %s message: %s",
                 binascii.hexlify(mtype),
                 binascii.hexlify(message),
             )
@@ -509,7 +515,7 @@ class Hub:
     async def response_parser(self):
         """Receive a response from the hub and work out what message it is."""
         try:
-            _LOGGER.info("Starting response parser")
+            _LOGGER.debug(f"{self.host}: Starting response parser")
             while True:
                 try:
                     with async_timeout.timeout(30):
@@ -521,7 +527,7 @@ class Hub:
                 except errors.InvalidResponseException:
                     self.send_command(const.COMMAND_PING)
         except errors.NotConnectedException:
-            _LOGGER.info("Disconnected, stopping parser")
+            _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
 
     async def update(self):
         """Update all hub information (includes scenes, rooms, and rollers)."""
@@ -531,7 +537,7 @@ class Hub:
             bytes.fromhex("F000"),
             bytes.fromhex("000000000000FF"),
         )
-        _LOGGER.info("Hub update command sent")
+        _LOGGER.debug(f"{self.host}: Hub update command sent")
 
     async def send_payload(self, command, message_type, message):
         """Send payload to the hub."""
@@ -551,35 +557,35 @@ class Hub:
         Runs until the stop() method is called.
         """
         if self.running:
-            _LOGGER.warning("Already running")
+            _LOGGER.warning(f"{self.host}: Already running")
             return
         self.running = True
         while self.running:
             try:
-                _LOGGER.info("Connecting")
+                _LOGGER.info(f"{self.host}: Connecting")
                 await self.connect()
             except errors.CannotConnectException:
-                _LOGGER.warning("Connect failed")
+                _LOGGER.warning(f"{self.host}: Connect failed")
                 continue
             except errors.InvalidResponseException:
-                _LOGGER.warning("Handshake failed")
+                _LOGGER.warning(f"{self.host}: Handshake failed")
                 await self.disconnect()
                 continue
             try:
                 await self.update()
                 await self.response_parser()
             except errors.InvalidResponseException:
-                _LOGGER.warning("Protocol error")
+                _LOGGER.warning(f"{self.host}: Protocol error")
             if self.running:
                 await self.disconnect()
                 await asyncio.sleep(5)
-        _LOGGER.debug("Stopped")
+        _LOGGER.debug(f"{self.host}: Stopped")
 
     async def stop(self):
         """Tell hub to stop and await for it to disconnect."""
         if not self.running:
-            _LOGGER.warning("Already stopped")
+            _LOGGER.warning(f"{self.host}: Already stopped")
             return
-        _LOGGER.debug("Stopping")
+        _LOGGER.debug(f"{self.host}: Stopping")
         self.running = False
         await self.disconnect()

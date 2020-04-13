@@ -26,7 +26,7 @@ class HubTransportBase(asyncio.Protocol):
 
     def connection_lost(self, exc):
         """Called when a connection is lost."""
-        _LOGGER.info("Socket closed")
+        _LOGGER.debug("Socket closed")
 
 
 class HubTransportUdp(HubTransportBase):
@@ -55,7 +55,7 @@ class HubTransportUdp(HubTransportBase):
     async def close(self):
         """Close the connection."""
         self.transport.close()
-        _LOGGER.info("UDP connection closed")
+        _LOGGER.debug("UDP connection closed")
 
     def send(self, buffer):
         """Abstraction of the underlying transport to send a buffer."""
@@ -115,7 +115,6 @@ class HubTransportTcp(HubTransportBase):
         self.transport, _ = await loop.create_connection(
             lambda: self, self.host, self.port
         )
-        _LOGGER.error(f"{self.host}")
         self.writer = asyncio.StreamWriter(
             self.transport, self.protocol, self.reader, loop
         )
@@ -126,14 +125,13 @@ class HubTransportTcp(HubTransportBase):
             self.host = host
 
         if self.writer:
-            _LOGGER.warning("Already connected.")
+            _LOGGER.warning(f"{self.host}: Already connected.")
             return
 
-        if self.connect_task:
-            _LOGGER.warning("Already connecting.")
-            return
-
-        self.connect_task = asyncio.create_task(self.do_connection())
+        if self.connect_task and not self.connect_task.done():
+            _LOGGER.warning(f"{self.host}: Already connecting.")
+        else:
+            self.connect_task = asyncio.create_task(self.do_connection())
 
         await self.connect_task
 
@@ -143,22 +141,20 @@ class HubTransportTcp(HubTransportBase):
             self.writer.close()
             await self.writer.wait_closed()
             self.writer = None
-            _LOGGER.debug("TCP buffer cleared.")
+            _LOGGER.debug(f"{self.host}: TCP buffer cleared.")
 
         if self.transport:
             self.transport.close()
-            _LOGGER.info("TCP connection closed.")
-        elif self.connect_task:
-            try:
-                self.connect_task.cancel()
-            except asyncio.CancelledError:
-                pass
-            self.connect_task = None
+            _LOGGER.debug(f"{self.host}: TCP connection closed.")
+        elif self.connect_task and not self.connect_task.done():
+            self.connect_task.cancel()
         else:
-            _LOGGER.warning("Not connected")
+            _LOGGER.warning(f"{self.host}: Not connected")
 
     def send(self, buffer):
         """Abstraction of the underlying transport to send a buffer."""
+        if not self.writer or self.writer.is_closing():
+            raise NotConnectedException
         self.writer.write(buffer)
 
     async def receive(self):
@@ -169,7 +165,6 @@ class HubTransportTcp(HubTransportBase):
 
     def data_received(self, data):
         """Callback when data has been received."""
-        _LOGGER.debug("TCP data received.")
         self.protocol.data_received(data)
 
     def connection_made(self, transport):
