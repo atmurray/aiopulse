@@ -102,7 +102,23 @@ class HubTransportTcp(HubTransportBase):
         self.transport = None
         self.protocol = None
         self.is_udp = False
+        self.connect_task = None
         super().__init__()
+
+    async def do_connection(self):
+        """Try and establish a TCP connection."""
+        loop = asyncio.get_event_loop()
+        self.reader = asyncio.StreamReader(loop=loop)
+        self.protocol = asyncio.StreamReaderProtocol(self.reader, loop=loop)
+
+        # The following blocks until a connection is made
+        self.transport, _ = await loop.create_connection(
+            lambda: self, self.host, self.port
+        )
+        _LOGGER.error(f"{self.host}")
+        self.writer = asyncio.StreamWriter(
+            self.transport, self.protocol, self.reader, loop
+        )
 
     async def connect(self, host=None):
         """Init connection."""
@@ -110,30 +126,36 @@ class HubTransportTcp(HubTransportBase):
             self.host = host
 
         if self.writer:
-            _LOGGER.warn("Already connected.")
+            _LOGGER.warning("Already connected.")
             return
 
-        loop = asyncio.get_event_loop()
-        self.reader = asyncio.StreamReader(loop=loop)
-        # super().__init__(self.reader)
-        self.protocol = asyncio.StreamReaderProtocol(self.reader, loop=loop)
-        self.transport, _ = await loop.create_connection(
-            lambda: self, self.host, self.port
-        )
-        self.writer = asyncio.StreamWriter(
-            self.transport, self.protocol, self.reader, loop
-        )
+        if self.connect_task:
+            _LOGGER.warning("Already connecting.")
+            return
+
+        self.connect_task = asyncio.create_task(self.do_connection())
+
+        await self.connect_task
 
     async def close(self):
         """Close the connection."""
-        if not self.writer:
-            _LOGGER.error("Not connected")
-            return
+        if self.writer:
+            self.writer.close()
+            await self.writer.wait_closed()
+            self.writer = None
+            _LOGGER.debug("TCP buffer cleared.")
 
-        self.writer.close()
-        await self.writer.wait_closed()
-        self.writer = None
-        _LOGGER.info("TCP connection closed.")
+        if self.transport:
+            self.transport.close()
+            _LOGGER.info("TCP connection closed.")
+        elif self.connect_task:
+            try:
+                self.connect_task.cancel()
+            except asyncio.CancelledError:
+                pass
+            self.connect_task = None
+        else:
+            _LOGGER.warning("Not connected")
 
     def send(self, buffer):
         """Abstraction of the underlying transport to send a buffer."""

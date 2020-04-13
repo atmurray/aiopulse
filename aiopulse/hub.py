@@ -127,8 +127,10 @@ class Hub:
                                 await hub.disconnect()
                                 hubs[addr] = hub
                                 yield hub
-                            except errors.NotConnectedException:
-                                _LOGGER.error("Not connected")
+                            except errors.CannotConnectException:
+                                _LOGGER.warning("Couldn't connect to discovered hub")
+                            except errors.InvalidResponseException:
+                                _LOGGER.warning("Couldn't interrogate discovered hub")
         except asyncio.TimeoutError:
             pass
         _LOGGER.info("Discovery complete")
@@ -140,10 +142,13 @@ class Hub:
         if host:
             self.host = host
 
-        await self.protocol.connect(self.host)
+        try:
+            await self.protocol.connect(self.host)
+        except OSError:
+            raise errors.CannotConnectException
 
         if self.handshake.is_set():
-            _LOGGER.warn("Handshake already completed")
+            _LOGGER.warning("Handshake already completed")
             return False
 
         if self.protocol.is_udp:  # udp
@@ -190,9 +195,6 @@ class Hub:
         """Disconnect from the hub."""
         _LOGGER.debug("Disconnecting")
         await self.protocol.close()
-        if not self.handshake.is_set():
-            _LOGGER.warn("Not connected")
-            return
         self.handshake.clear()
         _LOGGER.info("Disconnected")
 
@@ -549,21 +551,25 @@ class Hub:
         Runs until the stop() method is called.
         """
         if self.running:
-            _LOGGER.warn("Already running")
+            _LOGGER.warning("Already running")
             return
         self.running = True
         while self.running:
             try:
                 _LOGGER.info("Connecting")
                 await self.connect()
+            except errors.CannotConnectException:
+                _LOGGER.warning("Connect failed")
+                continue
             except errors.InvalidResponseException:
-                _LOGGER.warn("Connect failed")
+                _LOGGER.warning("Handshake failed")
+                await self.disconnect()
                 continue
             try:
                 await self.update()
                 await self.response_parser()
             except errors.InvalidResponseException:
-                _LOGGER.warn("Connect failed")
+                _LOGGER.warning("Protocol error")
             if self.running:
                 await self.disconnect()
                 await asyncio.sleep(5)
@@ -572,7 +578,7 @@ class Hub:
     async def stop(self):
         """Tell hub to stop and await for it to disconnect."""
         if not self.running:
-            _LOGGER.warn("Already stopped")
+            _LOGGER.warning("Already stopped")
             return
         _LOGGER.debug("Stopping")
         self.running = False
