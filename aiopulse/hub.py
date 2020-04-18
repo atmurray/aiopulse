@@ -474,6 +474,7 @@ class Hub:
         ),  # Unknown from quentinsf
         bytes.fromhex("63000091"): Receiver("hub info", rec_message),
         bytes.fromhex("65000091"): Receiver("timer list", rec_message),
+        bytes.fromhex("6f000091"): Receiver("timer list", rec_message),
     }
 
     def response_parse(self, response):

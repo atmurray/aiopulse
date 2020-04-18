@@ -12,6 +12,10 @@ from typing import (
     Optional,
 )
 
+from aiopulse import _LOGGER
+
+_LOGGER.setLevel(logging.DEBUG)
+
 
 async def discover(prompt):
     """Task to discover all hubs on the local network."""
