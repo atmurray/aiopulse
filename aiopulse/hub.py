@@ -225,7 +225,6 @@ class Hub:
 
     def response_hubinfo(self, message):
         """Receive start of hub information."""
-        _LOGGER.debug(f"{self.host}: Received hub information")
         ptr = 10
         self.firmware_name, ptr = utils.unpack_string(message, ptr)
         ptr += 2
@@ -239,13 +238,11 @@ class Hub:
 
     def response_hubinfoend(self, message):
         """Receive end of hub information."""
-        _LOGGER.debug(f"{self.host}: Received end of hub information")
         self.event_update.set()
         self.notify_callback()
 
     def response_roomlist(self, message):
         """Receive room list."""
-        _LOGGER.debug(f"{self.host}: Received room list")
         ptr = 12
         room_count, ptr = utils.unpack_int(message, ptr, 1)
         for _ in range(room_count):
@@ -262,7 +259,6 @@ class Hub:
 
     def response_scenelist(self, message):
         """Receive scene list."""
-        _LOGGER.debug(f"{self.host}: Received scene list")
         ptr = 12
         scene_count, ptr = utils.unpack_int(message, ptr, 1)
         ptr += 2
@@ -282,12 +278,10 @@ class Hub:
 
     def response_timerlist(self, message):
         """Receive timer list."""
-        _LOGGER.debug(f"{self.host}: Received timer list")
         pass
 
     def response_roller_updated(self, message):
         """Receive change of roller information."""
-        _LOGGER.debug(f"{self.host}: Received update of roller information")
         ptr = 2  # sequence?
         ptr += 6
         ptr += 2  # unknown field
@@ -325,7 +319,6 @@ class Hub:
 
     def response_rollerlist(self, message):
         """Receive roller blind list."""
-        _LOGGER.debug(f"{self.host}: Received roller list")
         ptr = 2  # sequence?
         ptr += 10
         roller_count, ptr = utils.unpack_int(message, ptr, 1)
@@ -364,13 +357,11 @@ class Hub:
 
     def response_authinfo(self, message):
         """Receive acmeda account information."""
-        _LOGGER.debug(f"{self.host}: Received account information")
         ptr = 15
         _, ptr = utils.unpack_string(message, ptr)
 
     def response_position(self, message):
         """Receive change of roller position information."""
-        _LOGGER.debug(f"{self.host}: Received change of roller position")
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         ptr += 10
@@ -383,7 +374,6 @@ class Hub:
 
     def response_calibration(self, message):
         """Receive change of roller calibration information."""
-        _LOGGER.debug(f"{self.host}: Received change of calibration position")
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         ptr += 5  # letter A and then 4 bytes
@@ -395,7 +385,6 @@ class Hub:
 
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
-        _LOGGER.debug(f"{self.host}: Received broadcast response")
         pass
 
     class Receiver:
@@ -420,7 +409,7 @@ class Hub:
         bytes.fromhex("2301"): Receiver("position", response_position),
         bytes.fromhex("2501"): Receiver("roller info updated", response_roller_updated),
         bytes.fromhex("2b01"): Receiver("calibration", response_calibration),
-        bytes.fromhex("0f00"): Receiver("discover", response_discover),
+        bytes.fromhex("0f00"): Receiver("discover response", response_discover),
     }
 
     def rec_ping(self, message):
@@ -432,16 +421,23 @@ class Hub:
         """Receive and decode a message from the hub."""
         if message:
             if message[0] != 6:
+                _LOGGER.error(f"{self.host}: First message byte not 0x06")
                 raise errors.InvalidResponseException
 
             if message[1 : (1 + len(self.topic))] != self.topic:
+                _LOGGER.error(
+                    f"{self.host}: Received invalid topic: "
+                    f"{message[1 : (1 + len(self.topic))]}, "
+                    f"expected: {self.topic}"
+                )
                 raise errors.InvalidResponseException
+
             ptr = 1 + len(self.topic)
             _, ptr = utils.unpack_int(message, 2, ptr)
             mtype = message[ptr : (ptr + 2)]
             ptr = ptr + 2
             if mtype in self.msgmap:
-                _LOGGER.debug(f"{self.host}: Parsing %s", self.msgmap[mtype].name)
+                _LOGGER.info(f"{self.host}: Parsing {self.msgmap[mtype].name}")
                 self.msgmap[mtype].execute(self, message[ptr:])
             else:
                 _LOGGER.warning(
@@ -452,9 +448,12 @@ class Hub:
 
     respmap = {
         const.RESPONSE_PING: Receiver("ping", rec_ping),
-        bytes.fromhex("03000091"): Receiver("acknowledge", rec_message),
         bytes.fromhex("01000091"): Receiver("scene list", rec_message),
         bytes.fromhex("02000091"): Receiver("roller list", rec_message),
+        bytes.fromhex("03000091"): Receiver("acknowledge", rec_message),
+        bytes.fromhex("04000091"): Receiver(
+            "04000091", rec_message
+        ),  # Unknown from quentinsf
         bytes.fromhex("23000091"): Receiver("hub info end", rec_message),
         bytes.fromhex("28000091"): Receiver("discover", rec_message),
         bytes.fromhex("34000091"): Receiver("moving", rec_message),
@@ -470,47 +469,50 @@ class Hub:
         ),  # after adding second room
         bytes.fromhex("5F000091"): Receiver("hub info", rec_message),
         bytes.fromhex("60000091"): Receiver("room list", rec_message),
-        bytes.fromhex("65000091"): Receiver("timer list", rec_message),
         bytes.fromhex("62000091"): Receiver(
             "62000091", rec_message
         ),  # Unknown from quentinsf
-        bytes.fromhex("04000091"): Receiver(
-            "04000091", rec_message
-        ),  # Unknown from quentinsf
+        bytes.fromhex("63000091"): Receiver("hub info", rec_message),
+        bytes.fromhex("65000091"): Receiver("timer list", rec_message),
     }
 
     def response_parse(self, response):
         """Decode response."""
         if response[0:4] != bytes.fromhex("00000003"):
             _LOGGER.warning(
-                f"{self.host}: Unknown response: %s", binascii.hexlify(response[0:4])
+                f"{self.host}: Unknown response: {binascii.hexlify(response[0:4])}"
             )
             raise errors.InvalidResponseException
 
-        message_type = response[4:8]
+        try:
+            message_type = response[4:8]
 
-        if message_type[0] > 127:
-            message_type = response[5:9]
-            message = response[9:]
-        else:
-            message = response[8:]
+            if message_type[0] > 127:
+                message_type = response[5:9]
+                message = response[9:]
+            else:
+                message = response[8:]
 
-        mtype = bytes(message_type)
-        _LOGGER.debug(
-            f"{self.host}: Received message type: %s message: %s",
-            binascii.hexlify(mtype),
-            binascii.hexlify(message),
-        )
-        if mtype in Hub.respmap:
-            _LOGGER.debug(f"{self.host}: Received %s", Hub.respmap[mtype].name)
-            Hub.respmap[mtype].execute(self, message)
-        else:
-            _LOGGER.warning(
-                f"{self.host}: Received unknown message type: %s message: %s",
-                binascii.hexlify(mtype),
-                binascii.hexlify(message),
+            mtype = bytes(message_type)
+            if mtype in Hub.respmap:
+                _LOGGER.debug(
+                    f"{self.host}: Received response: {binascii.hexlify(mtype)} "
+                    f"{Hub.respmap[mtype].name} content: {message}"
+                )
+                Hub.respmap[mtype].execute(self, message)
+            else:
+                _LOGGER.warning(
+                    f"{self.host}: Received unknown response type: "
+                    f"{binascii.hexlify(mtype)}, "
+                    f"trying to decode anyway. Message: {binascii.hexlify(message)}"
+                )
+                self.rec_message(message)
+        except Exception:
+            logging.exception(
+                f"{self.host}: Exception raised when parsing response: "
+                f"{binascii.hexlify(response)}"
             )
-            self.rec_message(message)
+            raise errors.InvalidResponseException
 
     async def response_parser(self):
         """Receive a response from the hub and work out what message it is."""
