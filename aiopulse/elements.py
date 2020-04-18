@@ -116,7 +116,7 @@ class Room:
         self.update_callbacks: List[Callable] = []
 
     def __str__(self):
-        """Returns string representation of roller."""
+        """Returns string representation of room."""
         return "Name: {} ID: {} Icon: {}".format(self.name, self.id[0:4], self.icon)
 
     def callback_subscribe(self, callback):
@@ -196,5 +196,20 @@ class Scene:
         self.name = None
 
     def __str__(self):
-        """Returns string representation of roller."""
+        """Returns string representation of scene."""
+        return "Name: {} ID: {} Icon: {}".format(self.name, self.id[0:4], self.icon)
+
+
+class Timer:
+    """Representation of a Timer."""
+
+    def __init__(self, hub, timer_id):
+        """Init a new timer."""
+        self.hub = hub
+        self.id = timer_id
+        self.icon = None
+        self.name = None
+
+    def __str__(self):
+        """Returns string representation of timer."""
         return "Name: {} ID: {} Icon: {}".format(self.name, self.id[0:4], self.icon)

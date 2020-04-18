@@ -32,7 +32,6 @@ class Hub:
         self.topic = str.encode("Smart_Id1_y:")
         self.sequence = 4
         self.handshake = asyncio.Event()
-        self.event_update = asyncio.Event()
         self.response_task = None
         self.running = False
 
@@ -49,6 +48,7 @@ class Hub:
         self.rollers = {}
         self.rooms = {}
         self.scenes = {}
+        self.timers = {}
 
         self.handshake.clear()
         self.update_callbacks: List[Callable] = []
@@ -236,56 +236,12 @@ class Hub:
         ptr += 2
         self.ip_address, ptr = utils.unpack_string(message, ptr)
 
-    def response_hubinfoend(self, message):
-        """Receive end of hub information."""
-        self.event_update.set()
-        self.notify_callback()
-
-    def response_roomlist(self, message):
-        """Receive room list."""
-        ptr = 12
-        room_count, ptr = utils.unpack_int(message, ptr, 1)
-        for _ in range(room_count):
-            _, ptr = utils.unpack_bytes(message, ptr, 2)
-            room_id, ptr = utils.unpack_string(message, ptr)
-            _, ptr = utils.unpack_bytes(message, ptr, 4)
-            icon, ptr = utils.unpack_int(message, ptr, 1)
-            _, ptr = utils.unpack_bytes(message, ptr, 2)
-            room_name, ptr = utils.unpack_string(message, ptr)
-            if room_id not in self.rooms:
-                self.rooms[room_id] = elements.Room(self, room_id)
-            self.rooms[room_id].icon = icon
-            self.rooms[room_id].name = room_name
-
-    def response_scenelist(self, message):
-        """Receive scene list."""
-        ptr = 12
-        scene_count, ptr = utils.unpack_int(message, ptr, 1)
-        ptr += 2
-        for _ in range(scene_count):
-            scene_id, ptr = utils.unpack_string(message, ptr)
-            _, ptr = utils.unpack_bytes(message, ptr, 4)
-            icon, ptr = utils.unpack_int(message, ptr, 1)
-            _, ptr = utils.unpack_bytes(message, ptr, 2)
-            scene_name, ptr = utils.unpack_string(message, ptr)
-            _, ptr = utils.unpack_bytes(message, ptr, 7)
-            _, ptr = utils.unpack_bytes(message, ptr)
-            _, ptr = utils.unpack_bytes(message, ptr, 2)
-            if scene_id not in self.scenes:
-                self.scenes[scene_id] = elements.Scene(self, scene_id)
-            self.scenes[scene_id].icon = icon
-            self.scenes[scene_id].name = scene_name
-
-    def response_timerlist(self, message):
-        """Receive timer list."""
-        pass
-
     def response_roller_updated(self, message):
         """Receive change of roller information."""
         ptr = 2  # sequence?
         ptr += 6
         ptr += 2  # unknown field
-        room_id, ptr = utils.unpack_string(message, ptr)
+        room_id, ptr = utils.unpack_bytes(message, ptr)
         ptr += 4  # unknown field
         roller_type, ptr = utils.unpack_int(message, ptr, 1)
         ptr += 2  # unknown field
@@ -317,6 +273,23 @@ class Hub:
         self.rollers[roller_id].notify_callback()
         self.notify_callback()
 
+    def response_roomlist(self, message):
+        """Receive room list."""
+        ptr = 12
+        room_count, ptr = utils.unpack_int(message, ptr, 1)
+        for _ in range(room_count):
+            _, ptr = utils.unpack_bytes(message, ptr, 2)
+            room_id, ptr = utils.unpack_bytes(message, ptr)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)
+            icon, ptr = utils.unpack_int(message, ptr, 1)
+            _, ptr = utils.unpack_bytes(message, ptr, 2)
+            room_name, ptr = utils.unpack_string(message, ptr)
+            if room_id not in self.rooms:
+                self.rooms[room_id] = elements.Room(self, room_id)
+            self.rooms[room_id].icon = icon
+            self.rooms[room_id].name = room_name
+        self.notify_callback()
+
     def response_rollerlist(self, message):
         """Receive roller blind list."""
         ptr = 2  # sequence?
@@ -326,7 +299,7 @@ class Hub:
             ptr += 4  # unknown field
             roller_id, ptr = utils.unpack_int(message, ptr, 6)
             ptr += 2  # unknown field
-            room_id, ptr = utils.unpack_string(message, ptr)
+            room_id, ptr = utils.unpack_bytes(message, ptr)
             ptr += 4  # unknown field
             roller_type, ptr = utils.unpack_int(message, ptr, 1)
             ptr += 2  # unknown field
@@ -354,6 +327,53 @@ class Hub:
             self.rollers[roller_id].closed_percent = roller_percent
             self.rollers[roller_id].flags = roller_flags
             self.rollers[roller_id].notify_callback()
+        self.notify_callback()
+
+    def response_scenelist(self, message):
+        """Receive scene list."""
+        ptr = 0
+        _, ptr = utils.unpack_bytes(message, ptr, 12)
+        scene_count, ptr = utils.unpack_int(message, ptr, 1)
+        for _ in range(scene_count):
+            _, ptr = utils.unpack_bytes(message, ptr, 2)
+            scene_id, ptr = utils.unpack_bytes(message, ptr)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)
+            icon, ptr = utils.unpack_int(message, ptr, 1)
+            _, ptr = utils.unpack_bytes(message, ptr, 2)
+            scene_name, ptr = utils.unpack_string(message, ptr)
+            _, ptr = utils.unpack_bytes(message, ptr, 5)
+            # Not sure what is being read next but it seems to be variable
+            while message[ptr : ptr + 2] == b"R\x02":
+                _, ptr = utils.unpack_bytes(message, ptr, 2)
+                _, ptr = utils.unpack_bytes(message, ptr)
+
+            if scene_id not in self.scenes:
+                self.scenes[scene_id] = elements.Scene(self, scene_id)
+            self.scenes[scene_id].icon = icon
+            self.scenes[scene_id].name = scene_name
+        _, ptr = utils.unpack_bytes(message, ptr, 2)
+        self.notify_callback()
+
+    def response_timerlist(self, message):
+        """Receive timer list."""
+        ptr = 0
+        _, ptr = utils.unpack_bytes(message, ptr, 12)
+        timer_count, ptr = utils.unpack_int(message, ptr, 1)
+        return
+        for _ in range(timer_count):
+            _, ptr = utils.unpack_bytes(message, ptr, 2)
+            timer_id, ptr = utils.unpack_bytes(message, ptr)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)
+            icon, ptr = utils.unpack_int(message, ptr, 1)
+            _, ptr = utils.unpack_bytes(message, ptr, 2)
+            timer_name, ptr = utils.unpack_string(message, ptr)
+
+            if timer_id not in self.timers:
+                self.timers[timer_id] = elements.Timer(self, timer_id)
+            self.timers[timer_id].icon = icon
+            self.timers[timer_id].name = timer_name
+        _, ptr = utils.unpack_bytes(message, ptr, 2)
+        self.notify_callback()
 
     def response_authinfo(self, message):
         """Receive acmeda account information."""
@@ -401,10 +421,10 @@ class Hub:
 
     msgmap = {
         bytes.fromhex("1600"): Receiver("hub info", response_hubinfo),
-        bytes.fromhex("4101"): Receiver("hub info end", response_hubinfoend),
         bytes.fromhex("0101"): Receiver("room list", response_roomlist),
         bytes.fromhex("3301"): Receiver("scene list", response_scenelist),
         bytes.fromhex("2101"): Receiver("roller list", response_rollerlist),
+        bytes.fromhex("4101"): Receiver("timer list", response_timerlist),
         bytes.fromhex("0800"): Receiver("auth info", response_authinfo),
         bytes.fromhex("2301"): Receiver("position", response_position),
         bytes.fromhex("2501"): Receiver("roller info updated", response_roller_updated),
@@ -415,7 +435,6 @@ class Hub:
     def rec_ping(self, message):
         """Receive a ping from the hub."""
         _LOGGER.debug(f"{self.host}: Received hub ping response")
-        pass
 
     def rec_message(self, message):
         """Receive and decode a message from the hub."""
@@ -447,13 +466,14 @@ class Hub:
                 )
 
     respmap = {
-        const.RESPONSE_PING: Receiver("ping", rec_ping),
+        bytes.fromhex("03000016"): Receiver("ping", rec_ping),
         bytes.fromhex("01000091"): Receiver("scene list", rec_message),
         bytes.fromhex("02000091"): Receiver("roller list", rec_message),
         bytes.fromhex("03000091"): Receiver("acknowledge", rec_message),
         bytes.fromhex("04000091"): Receiver(
             "04000091", rec_message
         ),  # Unknown from quentinsf
+        bytes.fromhex("05000091"): Receiver("roller list", rec_message),
         bytes.fromhex("23000091"): Receiver("hub info end", rec_message),
         bytes.fromhex("28000091"): Receiver("discover", rec_message),
         bytes.fromhex("34000091"): Receiver("moving", rec_message),
@@ -475,6 +495,7 @@ class Hub:
         bytes.fromhex("63000091"): Receiver("hub info", rec_message),
         bytes.fromhex("65000091"): Receiver("timer list", rec_message),
         bytes.fromhex("6f000091"): Receiver("timer list", rec_message),
+        bytes.fromhex("71000091"): Receiver("scene list", rec_message),
     }
 
     def response_parse(self, response):
@@ -534,7 +555,6 @@ class Hub:
 
     async def update(self):
         """Update all hub information (includes scenes, rooms, and rollers)."""
-        self.event_update.clear()
         await self.send_payload(
             const.COMMAND_GET_HUB_INFO,
             bytes.fromhex("F000"),
