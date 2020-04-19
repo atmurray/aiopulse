@@ -14,8 +14,6 @@ from typing import (
 
 from aiopulse import _LOGGER
 
-_LOGGER.setLevel(logging.DEBUG)
-
 
 async def discover(prompt):
     """Task to discover all hubs on the local network."""
@@ -171,6 +169,26 @@ class HubPrompt(cmd.Cmd):
         for hub in self.hubs.values():
             self.add_job(hub.stop)
 
+    def do_log(self, sargs):
+        """Change logging level."""
+        if sargs == "critical":
+            _LOGGER.setLevel(logging.CRITICAL)
+            print("Log level set to critical")
+        elif sargs == "error":
+            _LOGGER.setLevel(logging.ERROR)
+            print("Log level set to error")
+        elif sargs == "warning":
+            _LOGGER.setLevel(logging.WARNING)
+            print("Log level set to warning")
+        elif sargs == "info":
+            _LOGGER.setLevel(logging.INFO)
+            print("Log level set to info")
+        elif sargs == "debug":
+            _LOGGER.setLevel(logging.DEBUG)
+            print("Log level set to debug")
+        else:
+            print("Valid log levels are critical, error, warning, info, and debug.")
+
     def do_exit(self, arg):
         """Command to exit."""
         print("Exiting")
@@ -180,8 +198,6 @@ class HubPrompt(cmd.Cmd):
 
 async def main():
     """Test code."""
-    logging.basicConfig(level=logging.INFO)
-
     event_loop = asyncio.get_running_loop()
 
     prompt = HubPrompt(event_loop)
@@ -195,4 +211,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

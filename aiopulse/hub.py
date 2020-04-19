@@ -395,10 +395,8 @@ class Hub:
             entity = None
             if timer_type == b"\x00\x01\x03\x01":  # Device Timer
                 _, ptr = utils.unpack_bytes(message, ptr, 8)
-                _LOGGER.error(f"{self.host}: {binascii.hexlify(_)}")
                 percent, ptr = utils.unpack_int(message, ptr, 1)
                 _, ptr = utils.unpack_bytes(message, ptr, 5)
-                _LOGGER.error(f"{self.host}: {binascii.hexlify(_)}")
                 roller_id, ptr = utils.unpack_int(message, ptr, 6)
                 if roller_id in self.rollers:
                     entity = self.rollers[roller_id]
@@ -520,36 +518,8 @@ class Hub:
                 )
 
     respmap = {
-        bytes.fromhex("03000016"): Receiver("ping", rec_ping),
-        bytes.fromhex("01000091"): Receiver("scene list", rec_message),
-        bytes.fromhex("02000091"): Receiver("roller list", rec_message),
-        bytes.fromhex("03000091"): Receiver("acknowledge", rec_message),
-        bytes.fromhex("04000091"): Receiver(
-            "04000091", rec_message
-        ),  # Unknown from quentinsf
-        bytes.fromhex("05000091"): Receiver("roller list", rec_message),
-        bytes.fromhex("23000091"): Receiver("hub info end", rec_message),
-        bytes.fromhex("28000091"): Receiver("discover", rec_message),
-        bytes.fromhex("34000091"): Receiver("moving", rec_message),
-        bytes.fromhex("42000091"): Receiver("unknown", rec_message),
-        bytes.fromhex("43000091"): Receiver("account info", rec_message),
-        bytes.fromhex("44000091"): Receiver("response move", rec_message),
-        const.RESPONSE_DISCOVER: Receiver("discover", rec_message),
-        bytes.fromhex("56000091"): Receiver("roller room change", rec_message),
-        bytes.fromhex("57000091"): Receiver("roller name change", rec_message),
-        bytes.fromhex("59000091"): Receiver("roller name change", rec_message),
-        bytes.fromhex("5b000091"): Receiver(
-            "room list", rec_message
-        ),  # after adding second room
-        bytes.fromhex("5F000091"): Receiver("hub info", rec_message),
-        bytes.fromhex("60000091"): Receiver("room list", rec_message),
-        bytes.fromhex("62000091"): Receiver(
-            "62000091", rec_message
-        ),  # Unknown from quentinsf
-        bytes.fromhex("63000091"): Receiver("hub info", rec_message),
-        bytes.fromhex("65000091"): Receiver("timer list", rec_message),
-        bytes.fromhex("6f000091"): Receiver("timer list", rec_message),
-        bytes.fromhex("71000091"): Receiver("scene list", rec_message),
+        22: Receiver("ping", rec_ping),
+        145: Receiver("message", rec_message),
     }
 
     def response_parse(self, response):
@@ -561,25 +531,23 @@ class Hub:
             raise errors.InvalidResponseException
 
         try:
-            message_type = response[4:8]
-
-            if message_type[0] > 127:
-                message_type = response[5:9]
+            if response[4] > 127:
                 message = response[9:]
+                mtype = response[8]
             else:
                 message = response[8:]
+                mtype = response[7]
 
-            mtype = bytes(message_type)
             if mtype in Hub.respmap:
                 _LOGGER.debug(
-                    f"{self.host}: Received response: {binascii.hexlify(mtype)} "
+                    f"{self.host}: Received response: {mtype} "
                     f"{Hub.respmap[mtype].name} content: {message}"
                 )
                 Hub.respmap[mtype].execute(self, message)
             else:
                 _LOGGER.warning(
                     f"{self.host}: Received unknown response type: "
-                    f"{binascii.hexlify(mtype)}, "
+                    f"{mtype}, "
                     f"trying to decode anyway. Message: {binascii.hexlify(message)}"
                 )
                 self.rec_message(message)
