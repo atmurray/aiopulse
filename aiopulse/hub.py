@@ -302,7 +302,7 @@ class Hub:
                 self.rooms[room_id] = elements.Room(self, room_id)
             self.rooms[room_id].icon = icon
             self.rooms[room_id].name = room_name
-        self.notify_callback()
+        # self.notify_callback(ROOMS)
 
     def response_rollerlist(self, message):
         """Receive roller blind list."""
@@ -366,7 +366,7 @@ class Hub:
             self.scenes[scene_id].icon = icon
             self.scenes[scene_id].name = scene_name
         _, ptr = utils.unpack_bytes(message, ptr, 2)
-        self.notify_callback()
+        # self.notify_callback(SCENES)
 
     def response_timerlist(self, message):
         """Receive timer list."""
@@ -421,7 +421,7 @@ class Hub:
             self.timers[timer_id].days = days
             self.timers[timer_id].entity = entity
         _, ptr = utils.unpack_bytes(message, ptr, 2)
-        self.notify_callback()
+        # self.notify_callback(TIMERS)
 
     def response_authinfo(self, message):
         """Receive acmeda account information."""

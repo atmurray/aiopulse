@@ -4,7 +4,7 @@ from distutils.core import setup
 setup(
     name="aiopulse",
     packages=["aiopulse"],
-    version="0.3.3",
+    version="0.3.4",
     license="apache-2.0",
     description="Python module for Rollease Acmeda Automate integration.",
     author="Alan Murray",
