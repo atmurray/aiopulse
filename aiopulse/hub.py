@@ -53,6 +53,17 @@ class Hub:
         self.handshake.clear()
         self.update_callbacks: List[Callable] = []
 
+    def __str__(self):
+        """Returns string representation of the hub."""
+        return (
+            f"Name: {self.name} "
+            f"ID: {self.id} "
+            f"Host: {self.host} "
+            f"MAC: {self.mac_address} "
+            f"Firmware: {self.firmware_name} "
+            f"WiFi: {self.wifi_module} "
+        )
+
     def callback_subscribe(self, callback):
         """Add a callback for hub updates."""
         self.update_callbacks.append(callback)
@@ -273,6 +284,9 @@ class Hub:
         self.rollers[roller_id].notify_callback()
         self.notify_callback()
 
+    def response_discard(self, message):
+        """Discard response."""
+
     def response_roomlist(self, message):
         """Receive room list."""
         ptr = 12
@@ -359,7 +373,6 @@ class Hub:
         ptr = 0
         _, ptr = utils.unpack_bytes(message, ptr, 12)
         timer_count, ptr = utils.unpack_int(message, ptr, 1)
-        return
         for _ in range(timer_count):
             _, ptr = utils.unpack_bytes(message, ptr, 2)
             timer_id, ptr = utils.unpack_bytes(message, ptr)
@@ -367,11 +380,48 @@ class Hub:
             icon, ptr = utils.unpack_int(message, ptr, 1)
             _, ptr = utils.unpack_bytes(message, ptr, 2)
             timer_name, ptr = utils.unpack_string(message, ptr)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)  # '   !\x02\x01\x00'
+            state, ptr = utils.unpack_int(message, ptr, 1)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)  # '   ;\x02\x01\x00'
+            hour, ptr = utils.unpack_int(message, ptr, 1)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)  # '   <\x02\x01\x00'
+            minute, ptr = utils.unpack_int(message, ptr, 1)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)  # '   "\x02\x04\x00'
+            days, ptr = utils.unpack_int(message, ptr, 1)
+            _, ptr = utils.unpack_bytes(message, ptr, 4)  # '\x00\x00\x00   ='
+            _, ptr = utils.unpack_bytes(message, ptr, 2)  # '\x02\x01'
+            timer_type, ptr = utils.unpack_bytes(message, ptr, 4)
+
+            entity = None
+            if timer_type == b"\x00\x01\x03\x01":  # Device Timer
+                _, ptr = utils.unpack_bytes(message, ptr, 8)
+                _LOGGER.error(f"{self.host}: {binascii.hexlify(_)}")
+                percent, ptr = utils.unpack_int(message, ptr, 1)
+                _, ptr = utils.unpack_bytes(message, ptr, 5)
+                _LOGGER.error(f"{self.host}: {binascii.hexlify(_)}")
+                roller_id, ptr = utils.unpack_int(message, ptr, 6)
+                if roller_id in self.rollers:
+                    entity = self.rollers[roller_id]
+            elif timer_type == b"\x00\x00\x10\x02":  # Scene Timer
+                scene_id, ptr = utils.unpack_bytes(message, ptr)
+                if scene_id in self.scenes:
+                    entity = self.scenes[scene_id]
+            else:
+                _LOGGER.error(
+                    f"{self.host}: Unexpected timer type received: "
+                    f"{binascii.hexlify(timer_type)}"
+                )
+                return
 
             if timer_id not in self.timers:
                 self.timers[timer_id] = elements.Timer(self, timer_id)
             self.timers[timer_id].icon = icon
             self.timers[timer_id].name = timer_name
+            self.timers[timer_id].state = state
+            self.timers[timer_id].hour = hour
+            self.timers[timer_id].minute = minute
+            self.timers[timer_id].days = days
+            self.timers[timer_id].entity = entity
         _, ptr = utils.unpack_bytes(message, ptr, 2)
         self.notify_callback()
 
@@ -428,6 +478,10 @@ class Hub:
         bytes.fromhex("0800"): Receiver("auth info", response_authinfo),
         bytes.fromhex("2301"): Receiver("position", response_position),
         bytes.fromhex("2501"): Receiver("roller info updated", response_roller_updated),
+        bytes.fromhex("4301"): Receiver("timer created", response_discard),
+        bytes.fromhex("4501"): Receiver("timer device updated", response_discard),
+        bytes.fromhex("4901"): Receiver("timer info updated", response_discard),
+        bytes.fromhex("4701"): Receiver("timer deleted", response_discard),
         bytes.fromhex("2b01"): Receiver("calibration", response_calibration),
         bytes.fromhex("0f00"): Receiver("discover response", response_discover),
     }

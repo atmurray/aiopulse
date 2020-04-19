@@ -122,6 +122,10 @@ class HubPrompt(cmd.Cmd):
             for scene in hub.scenes.values():
                 scene_id += 1
                 print(f"Scene {scene_id}: {scene}")
+            timer_id = 0
+            for timer in hub.timers.values():
+                timer_id += 1
+                print(f"Timer {timer_id}: {timer}")
 
     def do_moveto(self, sargs):
         """Command to tell a roller to move a % closed."""

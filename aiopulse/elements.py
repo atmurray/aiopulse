@@ -209,7 +209,20 @@ class Timer:
         self.id = timer_id
         self.icon = None
         self.name = None
+        self.state = None
+        self.hour = None
+        self.minute = None
+        self.days = None
+        self.entity = None
 
     def __str__(self):
         """Returns string representation of timer."""
-        return "Name: {} ID: {} Icon: {}".format(self.name, self.id[0:4], self.icon)
+        return (
+            f"Name: {self.name} "
+            f"ID: {self.id[0:4]} "
+            f"Icon: {self.icon} "
+            f"State: {self.state} "
+            f"Time: {self.hour}:{self.minute} "
+            f"Days: {self.days:>07b} "
+            f'Entity: {self.entity.name if self.entity else "None"}'
+        )
