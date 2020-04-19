@@ -31,7 +31,7 @@ class Roller:
             self.name,
             self.id,
             self.serial,
-            self.room.name,
+            self.room.name if self.room else "None",
             self.type,
             self.closed_percent,
             self.battery,

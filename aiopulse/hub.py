@@ -36,7 +36,7 @@ class Hub:
         self.running = False
 
         self.name = "Acmeda Pulse WiFi Hub"
-        self.id = None
+        self.id = host
         self.host = host
         self.mac_address = None
         self.ip_address = None

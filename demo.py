@@ -106,17 +106,22 @@ class HubPrompt(cmd.Cmd):
     def do_list(self, args):
         """Command to list all hubs, rollers, rooms, and scenes."""
         print("Listing hubs...")
-        hid = 1
+        hub_id = 0
         for hub in self.hubs.values():
-            print("Hub {}: Name: {}".format(hid, hub.id))
-            rid = 1
+            hub_id += 1
+            print(f"Hub {hub_id}: {hub}")
+            roller_id = 0
             for roller in hub.rollers.values():
-                print("Roller {}: {}".format(rid, roller))
-                rid += 1
+                roller_id += 1
+                print(f"Roller {roller_id}: {roller}")
+            room_id = 0
             for room in hub.rooms.values():
-                print("Room {}".format(room))
+                room_id += 1
+                print(f"Room {room_id}: {room}")
+            scene_id = 0
             for scene in hub.scenes.values():
-                print("Scene {}".format(scene))
+                scene_id += 1
+                print(f"Scene {scene_id}: {scene}")
 
     def do_moveto(self, sargs):
         """Command to tell a roller to move a % closed."""
