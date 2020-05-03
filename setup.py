@@ -10,7 +10,7 @@ setup(
     author="Alan Murray",
     author_email="pypi@atmurray.net",
     url="https://github.com/atmurray/aiopulse",
-    download_url="https://github.com/atmurray/aiopulse/archive/v0.3.3.tar.gz",
+    download_url="https://github.com/atmurray/aiopulse/archive/v0.4.0.tar.gz",
     keywords=["automation"],
     install_requires=["asyncio", "async_timeout"],
     classifiers=[
