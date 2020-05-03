@@ -9,6 +9,7 @@ from aiopulse.errors import (
     NotRunningException,
     InvalidResponseException,
 )
+from aiopulse.const import UpdateType
 
 __all__ = [
     "Hub",
@@ -19,6 +20,7 @@ __all__ = [
     "NotConnectedException",
     "NotRunningException",
     "InvalidResponseException",
+    "UpdateType",
 ]
 __version__ = "0.3.4"
 __author__ = "Alan Murray"

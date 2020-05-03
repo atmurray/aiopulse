@@ -36,7 +36,7 @@ class Hub:
         self.running = False
 
         self.name = "Acmeda Pulse WiFi Hub"
-        self.id = host
+        self.id = None
         self.host = host
         self.mac_address = None
         self.ip_address = None
@@ -101,13 +101,15 @@ class Hub:
 
         return task
 
-    def notify_callback(self):
+    def notify_callback(self, update_type=None):
         """Tell callback that the hub has been updated."""
         for callback in self.update_callbacks:
-            self.async_add_job(callback)
+            self.async_add_job(callback, update_type)
 
     @staticmethod
-    async def discover(timeout=5):
+    async def discover(
+        timeout=5, loop: Optional[asyncio.events.AbstractEventLoop] = None
+    ):
         """Use a broadcast udp packet to find hubs on the lan."""
         discover_client = aiopulse.transport.HubTransportUdpBroadcast()
 
@@ -133,7 +135,7 @@ class Hub:
                         if addr and addr not in hubs:
                             _LOGGER.info(f"{addr[0]}: Discovered hub on port {addr[1]}")
                             try:
-                                hub = Hub(addr[0])
+                                hub = Hub(addr[0], loop)
                                 await hub.connect()
                                 await hub.disconnect()
                                 hubs[addr] = hub
@@ -246,6 +248,7 @@ class Hub:
         self.mac_address, ptr = utils.unpack_string(message, ptr)
         ptr += 2
         self.ip_address, ptr = utils.unpack_string(message, ptr)
+        self.notify_callback(const.UpdateType.info)
 
     def response_roller_updated(self, message):
         """Receive change of roller information."""
@@ -282,7 +285,7 @@ class Hub:
         self.rollers[roller_id].closed_percent = roller_percent
         self.rollers[roller_id].flags = roller_flags
         self.rollers[roller_id].notify_callback()
-        self.notify_callback()
+        self.notify_callback(const.UpdateType.rollers)
 
     def response_discard(self, message):
         """Discard response."""
@@ -302,7 +305,7 @@ class Hub:
                 self.rooms[room_id] = elements.Room(self, room_id)
             self.rooms[room_id].icon = icon
             self.rooms[room_id].name = room_name
-        # self.notify_callback(ROOMS)
+        self.notify_callback(const.UpdateType.rooms)
 
     def response_rollerlist(self, message):
         """Receive roller blind list."""
@@ -310,6 +313,7 @@ class Hub:
         ptr += 10
         roller_count, ptr = utils.unpack_int(message, ptr, 1)
         for _ in range(roller_count):
+            start = ptr
             ptr += 4  # unknown field
             roller_id, ptr = utils.unpack_int(message, ptr, 6)
             ptr += 2  # unknown field
@@ -327,6 +331,8 @@ class Hub:
             ptr += 5  # unknown field
             roller_percent, ptr = utils.unpack_int(message, ptr, 1)
             roller_flags, ptr = utils.unpack_int(message, ptr, 1)
+
+            _LOGGER.debug(f"{binascii.hexlify(message[start:ptr])}")
             if roller_id not in self.rollers:
                 self.rollers[roller_id] = elements.Roller(self, roller_id)
             self.rollers[roller_id].name = roller_name
@@ -341,7 +347,7 @@ class Hub:
             self.rollers[roller_id].closed_percent = roller_percent
             self.rollers[roller_id].flags = roller_flags
             self.rollers[roller_id].notify_callback()
-        self.notify_callback()
+        self.notify_callback(const.UpdateType.rollers)
 
     def response_scenelist(self, message):
         """Receive scene list."""
@@ -366,7 +372,7 @@ class Hub:
             self.scenes[scene_id].icon = icon
             self.scenes[scene_id].name = scene_name
         _, ptr = utils.unpack_bytes(message, ptr, 2)
-        # self.notify_callback(SCENES)
+        self.notify_callback(const.UpdateType.scenes)
 
     def response_timerlist(self, message):
         """Receive timer list."""
@@ -421,7 +427,7 @@ class Hub:
             self.timers[timer_id].days = days
             self.timers[timer_id].entity = entity
         _, ptr = utils.unpack_bytes(message, ptr, 2)
-        # self.notify_callback(TIMERS)
+        self.notify_callback(const.UpdateType.timers)
 
     def response_authinfo(self, message):
         """Receive acmeda account information."""
@@ -504,7 +510,7 @@ class Hub:
                 raise errors.InvalidResponseException
 
             ptr = 1 + len(self.topic)
-            _, ptr = utils.unpack_int(message, 2, ptr)
+            _, ptr = utils.unpack_int(message, ptr, 2)
             mtype = message[ptr : (ptr + 2)]
             ptr = ptr + 2
             if mtype in self.msgmap:
@@ -524,39 +530,53 @@ class Hub:
 
     def response_parse(self, response):
         """Decode response."""
-        if response[0:4] != bytes.fromhex("00000003"):
-            _LOGGER.warning(
-                f"{self.host}: Unknown response: {binascii.hexlify(response[0:4])}"
-            )
-            raise errors.InvalidResponseException
-
-        try:
-            if response[4] > 127:
-                message = response[9:]
-                mtype = response[8]
-            else:
-                message = response[8:]
-                mtype = response[7]
-
-            if mtype in Hub.respmap:
-                _LOGGER.debug(
-                    f"{self.host}: Received response: {mtype} "
-                    f"{Hub.respmap[mtype].name} content: {message}"
-                )
-                Hub.respmap[mtype].execute(self, message)
-            else:
+        while response:
+            ptr = 0
+            header, ptr = utils.unpack_bytes(response, ptr, 4)
+            if header != bytes.fromhex("00000003"):
                 _LOGGER.warning(
-                    f"{self.host}: Received unknown response type: "
-                    f"{mtype}, "
-                    f"trying to decode anyway. Message: {binascii.hexlify(message)}"
+                    f"{self.host}: Unknown response: {binascii.hexlify(response[0:4])}"
                 )
-                self.rec_message(message)
-        except Exception:
-            logging.exception(
-                f"{self.host}: Exception raised when parsing response: "
-                f"{binascii.hexlify(response)}"
-            )
-            raise errors.InvalidResponseException
+                raise errors.InvalidResponseException
+
+            try:
+                msg_len, ptr = utils.unpack_int(response, ptr, 1)
+                msg_blocks = 1
+
+                if msg_len > 127:
+                    msg_blocks, ptr = utils.unpack_int(response, ptr, 1)
+
+                msg_end = ptr + msg_len + 128 * (msg_blocks - 1)
+
+                if msg_end > len(response):
+                    raise errors.InvalidResponseException
+
+                _, ptr = utils.unpack_bytes(response, ptr, 2)
+                mtype, ptr = utils.unpack_int(response, ptr, 1)
+
+                message = response[ptr:msg_end]
+                response = response[msg_end:]
+
+                if mtype in Hub.respmap:
+                    _LOGGER.debug(
+                        f"{self.host}: Received response: {mtype} "
+                        f"{Hub.respmap[mtype].name} content: {message}"
+                    )
+                    Hub.respmap[mtype].execute(self, message)
+                else:
+                    _LOGGER.warning(
+                        f"{self.host}: Received unknown response type: "
+                        f"{mtype}, "
+                        f"trying to decode anyway. Message: {binascii.hexlify(message)}"
+                    )
+                    self.rec_message(message)
+
+            except Exception:
+                logging.exception(
+                    f"{self.host}: Exception raised when parsing response: "
+                    f"{binascii.hexlify(response)}"
+                )
+                raise errors.InvalidResponseException
 
     async def response_parser(self):
         """Receive a response from the hub and work out what message it is."""

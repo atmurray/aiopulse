@@ -1,4 +1,8 @@
 """Acmeda Pulse Hub constants."""
+from enum import Enum
+
+UpdateType = Enum("UpdateType", "info rollers rooms scenes timers")
+
 HEADER = bytes.fromhex("00000003")
 COMMAND_DISCOVER = bytes.fromhex("03000003")
 RESPONSE_DISCOVER = bytes.fromhex("57000004")
