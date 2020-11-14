@@ -35,7 +35,6 @@ class Hub:
         self.response_task = None
         self.running = False
 
-        self.name = "Acmeda Pulse WiFi Hub"
         self.id = None
         self.host = host
         self.mac_address = None
@@ -56,7 +55,6 @@ class Hub:
     def __str__(self):
         """Returns string representation of the hub."""
         return (
-            f"Name: {self.name} "
             f"ID: {self.id} "
             f"Host: {self.host} "
             f"MAC: {self.mac_address} "
@@ -128,7 +126,7 @@ class Hub:
                         addr = None
                         try:
                             with async_timeout.timeout(timeout):
-                                (_, addr) = await discover_client.receive()
+                                (response, addr) = await discover_client.receive()
                         except asyncio.TimeoutError:
                             pass
 
@@ -136,6 +134,9 @@ class Hub:
                             _LOGGER.info(f"{addr[0]}: Discovered hub on port {addr[1]}")
                             try:
                                 hub = Hub(addr[0], loop)
+                                discover_client.send(
+                                    const.HEADER + const.COMMAND_DISCOVER
+                                )
                                 await hub.connect()
                                 await hub.disconnect()
                                 hubs[addr] = hub
@@ -161,8 +162,8 @@ class Hub:
 
         try:
             await self.protocol.connect(self.host)
-        except OSError:
-            raise errors.CannotConnectException
+        except OSError as inst:
+            raise errors.CannotConnectException(inst)
 
         if self.handshake.is_set():
             _LOGGER.warning(f"{self.host} Handshake already completed")
@@ -189,19 +190,23 @@ class Hub:
             const.COMMAND_SETID,
             bytes.fromhex("16000e0001000000000000000c000600120311073816ff9b"),
         )
-        await self.get_response(const.RESPONSE_SETID)
+        response = await self.get_response(const.RESPONSE_SETID)
+        self.response_parse(response)
 
         self.send_command(
             const.COMMAND_UNKNOWN1,
             bytes.fromhex("1100150002000000000000006002010030ffa9"),
         )
-        await self.get_response(
+        response = await self.get_response(
             const.RESPONSE_UNKNOWN1
             + bytes.fromhex("06")
             + self.topic
             + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d")
         )
-        await self.get_response(const.RESPONSE_SETID)
+        self.response_parse(response)
+
+        response = await self.get_response(const.RESPONSE_SETID)
+        self.response_parse(response)
 
         _LOGGER.info(f"{self.host}: Handshake complete")
         self.handshake.set()
@@ -450,15 +455,28 @@ class Hub:
         """Receive change of roller calibration information."""
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
-        ptr += 5  # letter A and then 4 bytes
-        ptr += 5  # letter B and then 4 bytes
-        ptr += 5  # letter C and then 4 bytes
-        ptr += 5  # unknown
-        ptr += 8  # unknown
+        # letter A and then 4 bytes
+        unknown, ptr = utils.unpack_bytes(message, ptr, 5)
+        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        # letter B and then 4 bytes
+        unknown, ptr = utils.unpack_bytes(message, ptr, 5)
+        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        # letter C and then 4 bytes
+        unknown, ptr = utils.unpack_bytes(message, ptr, 5)
+        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        # unknown
+        unknown, ptr = utils.unpack_bytes(message, ptr, 5)
+        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        # unknown
+        unknown, ptr = utils.unpack_bytes(message, ptr, 8)
+        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
         ptr += 2  # checksum
 
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
+        ptr = 0
+        _, ptr = utils.unpack_bytes(message, ptr, 10)
+        _, ptr = utils.unpack_bytes(message, ptr)
         pass
 
     class Receiver:
@@ -475,6 +493,7 @@ class Hub:
 
     msgmap = {
         bytes.fromhex("1600"): Receiver("hub info", response_hubinfo),
+        bytes.fromhex("0d00"): Receiver("hub info updated", response_discard),
         bytes.fromhex("0101"): Receiver("room list", response_roomlist),
         bytes.fromhex("3301"): Receiver("scene list", response_scenelist),
         bytes.fromhex("2101"): Receiver("roller list", response_rollerlist),
@@ -582,15 +601,21 @@ class Hub:
         """Receive a response from the hub and work out what message it is."""
         try:
             _LOGGER.debug(f"{self.host}: Starting response parser")
-            while True:
+            while self.handshake.is_set():
                 try:
                     with async_timeout.timeout(30):
                         response = await self.protocol.receive()
                     if len(response) > 0:
                         self.response_parse(response)
                 except asyncio.TimeoutError:
+                    _LOGGER.debug(
+                        f"{self.host}: Receive timeout, sending ping keepalive"
+                    )
                     self.send_command(const.COMMAND_PING)
                 except errors.InvalidResponseException:
+                    _LOGGER.debug(
+                        f"{self.host}: Invalid response, sending ping keepalive"
+                    )
                     self.send_command(const.COMMAND_PING)
         except errors.NotConnectedException:
             _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
@@ -629,21 +654,23 @@ class Hub:
             try:
                 _LOGGER.info(f"{self.host}: Connecting")
                 await self.connect()
-            except errors.CannotConnectException:
-                _LOGGER.warning(f"{self.host}: Connect failed")
-                continue
-            except errors.InvalidResponseException:
-                _LOGGER.warning(f"{self.host}: Handshake failed")
-                await self.disconnect()
-                continue
-            try:
                 await self.update()
                 await self.response_parser()
-            except errors.InvalidResponseException:
-                _LOGGER.warning(f"{self.host}: Protocol error")
-            if self.running:
-                await self.disconnect()
-                await asyncio.sleep(5)
+            except errors.CannotConnectException as inst:
+                _LOGGER.warning(f"{self.host}: Connect failed {inst}")
+            except errors.InvalidResponseException as inst:
+                _LOGGER.warning(f"{self.host}: Handshake failed {inst}")
+            except errors.InvalidResponseException as inst:
+                _LOGGER.warning(f"{self.host}: Protocol error {inst}")
+            except Exception as inst:
+                _LOGGER.error(f"{self.host}: Uncaught exception occurred: {inst}")
+                del self.protocol
+                self.protocol = aiopulse.transport.HubTransportTcp(self.host)
+            finally:
+                if self.handshake.is_set():
+                    await self.disconnect()
+                if self.running:
+                    await asyncio.sleep(5)
         _LOGGER.debug(f"{self.host}: Stopped")
 
     async def stop(self):
