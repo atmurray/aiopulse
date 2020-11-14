@@ -4,13 +4,13 @@ from distutils.core import setup
 setup(
     name="aiopulse",
     packages=["aiopulse"],
-    version="0.4.0",
+    version="0.4.1",
     license="apache-2.0",
     description="Python module for Rollease Acmeda Automate integration.",
     author="Alan Murray",
     author_email="pypi@atmurray.net",
     url="https://github.com/atmurray/aiopulse",
-    download_url="https://github.com/atmurray/aiopulse/archive/v0.4.0.tar.gz",
+    download_url="https://github.com/atmurray/aiopulse/archive/v0.4.1.tar.gz",
     keywords=["automation"],
     install_requires=["asyncio", "async_timeout"],
     classifiers=[
