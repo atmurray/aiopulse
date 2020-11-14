@@ -1,12 +1,15 @@
 # Aiopulse
 
-## Asynchronous library to control Rollease Acmeda Automate roller blinds
+## Asynchronous library to control Rollease Acmeda Automate roller blinds via a version 1 Pulse Hub.
 
-Requires Python 3 and uses asyncio.
+The Rollease Acmeda Pulse Hub is a WiFi hub that communicates with Rollease Acmeda Automate roller blinds via a proprietary RF protocol.
+This module communicates over a local area network using a propriatery binary protocol to issues commands to the Pulse Hub.
+A module that supports version 2 Pulse Hubs has been developed separately here: https://pypi.org/project/aiopulse2/
+This module requires Python 3.4 or newer and uses asyncio.
 
 ### Installing
-I plan on publishing this module to PiPy once I'm happy that it has been adequately tested.
-For now, from the folder containing setup.py run `python setup.py install`.
+Available on PyPi here:https://pypi.org/project/aiopulse/, run `pip install aiopulse`. 
+Alternatively, download and extract a release and from within the folder containing setup.py run `python setup.py install`.
 
 ### Demo.py commands:
 | Command                               | Description               |
