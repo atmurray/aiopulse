@@ -8,11 +8,13 @@
 
 name: Upload Python Package
 
-on: push
+on:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   deploy:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -28,14 +30,46 @@ jobs:
     - name: Build package
       run: python -m build
     - name: Publish package
-      if: startsWith(github.ref, 'refs/tags')
+      if: github.ref == 'master'
       uses: pypa/gh-action-pypi-publish@master
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
     - name: Publish test package
+      if: github.ref == 'master-test'
       uses: pypa/gh-action-pypi-publish@master
       with:
         user: __token__
         password: ${{ secrets.TEST_PYPI_API_TOKEN }}
         repository_url: https://test.pypi.org/legacy/
+        
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+  publish-gpr:
+    needs: release # After release is created then run the second workflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 10
+          registry-url: https://npm.pkg.github.com/
+      - run: npm ci
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
