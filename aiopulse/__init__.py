@@ -22,7 +22,7 @@ __all__ = [
     "InvalidResponseException",
     "UpdateType",
 ]
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 __author__ = "Alan Murray"
 
 _LOGGER = logging.getLogger(__name__)

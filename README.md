@@ -23,4 +23,5 @@ Alternatively, download and extract a release and from within the folder contain
 |close [hub id] [blind id]              | Close blind|
 |stop [hub id] [blind id]               | Stop blind|
 |moveto [hub id] [blind id] [% closed]  | Open blind to percentage|
+|health [hub id] [blind id]             | Update the health of the blind|
 |exit                                   | Exit program|
