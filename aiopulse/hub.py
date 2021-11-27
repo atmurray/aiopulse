@@ -287,7 +287,6 @@ class Hub:
             roller.room = None
         roller.closed_percent = roller_percent
         roller.flags = roller_flags
-        self.async_add_job(roller.get_health)
         roller.notify_callback()
         self.notify_callback(const.UpdateType.rollers)
 
@@ -346,8 +345,7 @@ class Hub:
             else:
                 roller.room = None
             roller.closed_percent = roller_percent
-            roller.flags = roller_flags
-            self.async_add_job(roller.get_health)
+            roller.flags = roller_flags            
             roller.notify_callback()
 
         self.notify_callback(const.UpdateType.rollers)
@@ -451,8 +449,6 @@ class Hub:
 
     def response_rollerhealth(self, message):
         """Receive change of roller health information."""
-        if self.health_lock.locked():
-            self.health_lock.release()
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         # letter A and then 4 bytes
@@ -479,8 +475,11 @@ class Hub:
         ptr += 2  # checksum
         if roller_id in self.rollers:
             self.rollers[roller_id].battery = roller_battery
+            self.rollers[roller_id].health_updated()
             self.rollers[roller_id].notify_callback()
-
+        if self.health_lock.locked():
+            self.health_lock.release()
+            
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
         ptr = 0
@@ -677,6 +676,7 @@ class Hub:
         
         if self.health_lock.locked():
             self.health_lock.release()
+
     async def run(self):
         """Start hub by connecting then awaiting for messages.
 
@@ -716,5 +716,10 @@ class Hub:
             _LOGGER.warning(f"{self.host}: Already stopped")
             return
         _LOGGER.debug(f"{self.host}: Stopping")
+        self.rooms.clear()
+        self.scenes.clear()
+        self.timers.clear()
+        self.rollers.clear()
         self.running = False
         await self.disconnect()
+

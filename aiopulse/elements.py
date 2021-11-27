@@ -3,6 +3,7 @@ from typing import List, Callable
 
 import aiopulse.utils as utils
 import aiopulse.const as const
+import asyncio
 
 class Roller:
     """Representation of a Roller blind."""
@@ -20,6 +21,29 @@ class Roller:
         self.closed_percent = None
         self.flags = 0
         self.update_callbacks: List[Callable] = []
+
+        self.health_lock = asyncio.Lock()
+        self.health_task = hub.async_add_job(self.health_updater)
+
+    def __del__(self):
+        self.health_task.cancel()
+
+    def health_updated(self):
+        try:
+            self.health_lock.release()
+        except RuntimeError:
+            pass
+
+    async def health_updater(self):
+        await self.get_health()
+        running = True
+        while running:
+            try:
+                await asyncio.wait_for(self.health_lock, timeout=3600)
+            except asyncio.TimeoutError:
+                await self.get_health()
+            except asyncio.CancelledError:
+                running = False
 
     def __str__(self):
         """Returns string representation of roller."""
@@ -101,7 +125,6 @@ class Roller:
             + bytes.fromhex("ff")
         )
         await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
-
 
     async def get_health(self):
         """."""
@@ -194,7 +217,6 @@ class Room:
         )
         await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
-
 class Scene:
     """Representation of a Scene."""
 
@@ -208,7 +230,6 @@ class Scene:
     def __str__(self):
         """Returns string representation of scene."""
         return "Name: {} ID: {} Icon: {}".format(self.name, self.id[0:4], self.icon)
-
 
 class Timer:
     """Representation of a Timer."""
