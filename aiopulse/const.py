@@ -32,3 +32,5 @@ COMMAND_MOVE = bytes.fromhex("2d000090")
 
 GET_ROOMS = bytes.fromhex("01000091")
 GET_ROLLERS = bytes.fromhex("03000091")
+
+GET_HEALTH = bytes.fromhex("32000090")

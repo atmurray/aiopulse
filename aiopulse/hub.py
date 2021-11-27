@@ -20,7 +20,6 @@ import aiopulse.transport
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class Hub:
     """Representation of an Acmeda Pulse Hub."""
 
@@ -32,6 +31,7 @@ class Hub:
         self.topic = str.encode("Smart_Id1_y:")
         self.sequence = 4
         self.handshake = asyncio.Event()
+        self.health_lock = asyncio.Lock()
         self.response_task = None
         self.running = False
 
@@ -258,7 +258,8 @@ class Hub:
     def response_roller_updated(self, message):
         """Receive change of roller information."""
         ptr = 2  # sequence?
-        ptr += 6
+        ptr += 4
+        ptr += 2  # unknown field
         ptr += 2  # unknown field
         room_id, ptr = utils.unpack_bytes(message, ptr)
         ptr += 4  # unknown field
@@ -267,10 +268,7 @@ class Hub:
         roller_name, ptr = utils.unpack_string(message, ptr)
         ptr += 10  # unknown field
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
-        ptr += 4
-        # battery level seems to be out of 25, convert to percentage
-        roller_battery, ptr = utils.unpack_int(message, ptr, 1)
-        roller_battery *= 4
+        ptr += 5  # unknown field
         ptr += 5  # unknown field
         roller_percent, ptr = utils.unpack_int(message, ptr, 1)
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
@@ -286,7 +284,6 @@ class Hub:
             self.rollers[roller_id].room = self.rooms[room_id]
         else:
             self.rollers[roller_id].room = None
-        self.rollers[roller_id].battery = roller_battery
         self.rollers[roller_id].closed_percent = roller_percent
         self.rollers[roller_id].flags = roller_flags
         self.rollers[roller_id].notify_callback()
@@ -329,10 +326,7 @@ class Hub:
             roller_name, ptr = utils.unpack_string(message, ptr)
             ptr += 8  # unknown field
             roller_serial, ptr = utils.unpack_string(message, ptr)
-            ptr += 4
-            # battery level seems to be out of 25, convert to percentage
-            roller_battery, ptr = utils.unpack_int(message, ptr, 1)
-            roller_battery *= 4
+            ptr += 5  # unknown field
             ptr += 5  # unknown field
             roller_percent, ptr = utils.unpack_int(message, ptr, 1)
             roller_flags, ptr = utils.unpack_int(message, ptr, 1)
@@ -348,10 +342,10 @@ class Hub:
                 self.rollers[roller_id].room = self.rooms[room_id]
             else:
                 self.rollers[roller_id].room = None
-            self.rollers[roller_id].battery = roller_battery
             self.rollers[roller_id].closed_percent = roller_percent
             self.rollers[roller_id].flags = roller_flags
             self.rollers[roller_id].notify_callback()
+
         self.notify_callback(const.UpdateType.rollers)
 
     def response_scenelist(self, message):
@@ -451,8 +445,10 @@ class Hub:
             self.rollers[roller_id].flags = roller_flags
             self.rollers[roller_id].notify_callback()
 
-    def response_calibration(self, message):
-        """Receive change of roller calibration information."""
+    def response_rollerhealth(self, message):
+        """Receive change of roller health information."""
+        if self.health_lock.locked():
+            self.health_lock.release()
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         # letter A and then 4 bytes
@@ -465,12 +461,21 @@ class Hub:
         unknown, ptr = utils.unpack_bytes(message, ptr, 5)
         _LOGGER.debug(f"{binascii.hexlify(unknown)}")
         # unknown
-        unknown, ptr = utils.unpack_bytes(message, ptr, 5)
+        unknown, ptr = utils.unpack_bytes(message, ptr, 3)
         _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        # battery level
+        charge, ptr = utils.unpack_int(message, ptr, 1)
+        charge_fraction, ptr = utils.unpack_int(message, ptr, 1)
+        charge += charge_fraction/256.0
+        roller_battery = min(100,max(0,100.0 * (charge - 9.45) / (12.375 - 9.45)))
+        _LOGGER.debug(f"Battery: {charge} {roller_battery}")
         # unknown
         unknown, ptr = utils.unpack_bytes(message, ptr, 8)
         _LOGGER.debug(f"{binascii.hexlify(unknown)}")
         ptr += 2  # checksum
+        if roller_id in self.rollers:
+            self.rollers[roller_id].battery = roller_battery
+            self.rollers[roller_id].notify_callback()
 
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
@@ -505,7 +510,7 @@ class Hub:
         bytes.fromhex("4501"): Receiver("timer device updated", response_discard),
         bytes.fromhex("4901"): Receiver("timer info updated", response_discard),
         bytes.fromhex("4701"): Receiver("timer deleted", response_discard),
-        bytes.fromhex("2b01"): Receiver("calibration", response_calibration),
+        bytes.fromhex("2b01"): Receiver("roller health", response_rollerhealth),
         bytes.fromhex("0f00"): Receiver("discover response", response_discover),
     }
 
@@ -604,13 +609,13 @@ class Hub:
             while self.handshake.is_set():
                 try:
                     with async_timeout.timeout(30):
-                        response = await self.protocol.receive()
+                        response = await self.get_response()
                     if len(response) > 0:
                         self.response_parse(response)
                 except asyncio.TimeoutError:
                     _LOGGER.debug(
                         f"{self.host}: Receive timeout, sending ping keepalive"
-                    )
+                    )                      
                     self.send_command(const.COMMAND_PING)
                 except errors.InvalidResponseException:
                     _LOGGER.debug(
@@ -618,7 +623,7 @@ class Hub:
                     )
                     self.send_command(const.COMMAND_PING)
         except errors.NotConnectedException:
-            _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
+            _LOGGER.debug(f"{self.host}: Disconnected, stopping parser") 
 
     async def update(self):
         """Update all hub information (includes scenes, rooms, and rollers)."""
@@ -639,8 +644,35 @@ class Hub:
         self.sequence += 2
         command_header = const.HEADER + command + bytes.fromhex("05") + self.topic
         length = len(data) + 1  # bytes.fromhex('0C00')
-        self.protocol.send(command_header + utils.pack_int(length, 2) + data + checksum)
+        buffer = command_header + utils.pack_int(length, 2) + data + checksum
+        _LOGGER.debug(f"Sending buffer {binascii.hexlify(buffer)}")
+        self.protocol.send(buffer)
 
+    async def send_healthcheck(self, command, message_type, message):
+        """Send payload to the hub."""
+        if not self.running:
+            raise errors.NotRunningException
+        await self.handshake.wait()
+
+        await self.health_lock.acquire()
+        
+        data = message_type + utils.pack_int(self.sequence, 2) + message
+        checksum = bytes([sum(data) & 0xFF])
+        self.sequence += 2
+        command_header = const.HEADER + command + bytes.fromhex("05") + self.topic
+        length = len(data) + 1  # bytes.fromhex('0C00')
+        buffer = command_header + utils.pack_int(length, 2) + data + checksum
+        _LOGGER.debug(f"Sending buffer {binascii.hexlify(buffer)}")
+        self.protocol.send(buffer)
+        
+        try:
+            await asyncio.wait_for(self.health_lock.acquire(), timeout=5.0)
+
+        except asyncio.TimeoutError:
+            _LOGGER.warn(f"{self.host}: Health-check timed out.")
+        
+        if self.health_lock.locked():
+            self.health_lock.release()
     async def run(self):
         """Start hub by connecting then awaiting for messages.
 
@@ -660,6 +692,7 @@ class Hub:
                 _LOGGER.warning(f"{self.host}: Connect failed {inst}")
             except errors.InvalidResponseException as inst:
                 _LOGGER.warning(f"{self.host}: Handshake failed {inst}")
+                await self.disconnect()
             except errors.InvalidResponseException as inst:
                 _LOGGER.warning(f"{self.host}: Protocol error {inst}")
             except Exception as inst:

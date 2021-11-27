@@ -12,9 +12,6 @@ from typing import (
     Optional,
 )
 
-from aiopulse import _LOGGER
-
-
 async def discover(prompt):
     """Task to discover all hubs on the local network."""
     print("Starting hub discovery")
@@ -158,6 +155,14 @@ class HubPrompt(cmd.Cmd):
         if roller:
             print("Sending blind stop to {}".format(roller.name))
             self.add_job(roller.move_stop)
+
+    def do_health(self, sargs):
+        """Command to get health of a roller."""
+        args = sargs.split()
+        roller = self._get_roller(args)
+        if roller:
+            print("Sending get health to {}".format(roller.name))
+            self.add_job(roller.get_health)
 
     def do_connect(self, sargs):
         """Command to connect all hubs."""

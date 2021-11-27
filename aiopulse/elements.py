@@ -4,7 +4,6 @@ from typing import List, Callable
 import aiopulse.utils as utils
 import aiopulse.const as const
 
-
 class Roller:
     """Representation of a Roller blind."""
 
@@ -103,6 +102,17 @@ class Roller:
         )
         await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
+
+    async def get_health(self):
+        """."""
+        message = (
+            bytes.fromhex("0000000000000101")
+            + bytes.fromhex("0600")
+            + utils.pack_int(self.id, 6)
+            + bytes.fromhex("410201000E4202010004")
+            + bytes.fromhex("ff")
+        )
+        await self.hub.send_healthcheck(const.GET_HEALTH, bytes.fromhex("2A01"), message)
 
 class Room:
     """Representation of a Room."""
