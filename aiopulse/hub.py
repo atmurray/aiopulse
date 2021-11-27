@@ -275,18 +275,20 @@ class Hub:
         ptr += 2  # checksum
         if roller_id not in self.rollers:
             self.rollers[roller_id] = elements.Roller(self, roller_id)
-        self.rollers[roller_id].name = roller_name
+        roller = self.rollers[roller_id]
+        roller.name = roller_name
         # doesn't seem to come through in update
-        # self.rollers[roller_id].serial = roller_serial
-        self.rollers[roller_id].room_id = room_id
-        self.rollers[roller_id].type = roller_type
+        # roller.serial = roller_serial
+        roller.room_id = room_id
+        roller.type = roller_type
         if room_id in self.rooms:
-            self.rollers[roller_id].room = self.rooms[room_id]
+            roller.room = self.rooms[room_id]
         else:
-            self.rollers[roller_id].room = None
-        self.rollers[roller_id].closed_percent = roller_percent
-        self.rollers[roller_id].flags = roller_flags
-        self.rollers[roller_id].notify_callback()
+            roller.room = None
+        roller.closed_percent = roller_percent
+        roller.flags = roller_flags
+        self.async_add_job(roller.get_health)
+        roller.notify_callback()
         self.notify_callback(const.UpdateType.rollers)
 
     def response_discard(self, message):
@@ -334,17 +336,19 @@ class Hub:
             _LOGGER.debug(f"{binascii.hexlify(message[start:ptr])}")
             if roller_id not in self.rollers:
                 self.rollers[roller_id] = elements.Roller(self, roller_id)
-            self.rollers[roller_id].name = roller_name
-            self.rollers[roller_id].serial = roller_serial
-            self.rollers[roller_id].room_id = room_id
-            self.rollers[roller_id].type = roller_type
+            roller = self.rollers[roller_id]
+            roller.name = roller_name
+            roller.serial = roller_serial
+            roller.room_id = room_id
+            roller.type = roller_type
             if room_id in self.rooms:
-                self.rollers[roller_id].room = self.rooms[room_id]
+                roller.room = self.rooms[room_id]
             else:
-                self.rollers[roller_id].room = None
-            self.rollers[roller_id].closed_percent = roller_percent
-            self.rollers[roller_id].flags = roller_flags
-            self.rollers[roller_id].notify_callback()
+                roller.room = None
+            roller.closed_percent = roller_percent
+            roller.flags = roller_flags
+            self.async_add_job(roller.get_health)
+            roller.notify_callback()
 
         self.notify_callback(const.UpdateType.rollers)
 
@@ -467,7 +471,7 @@ class Hub:
         charge, ptr = utils.unpack_int(message, ptr, 1)
         charge_fraction, ptr = utils.unpack_int(message, ptr, 1)
         charge += charge_fraction/256.0
-        roller_battery = min(100,max(0,100.0 * (charge - 9.45) / (12.375 - 9.45)))
+        roller_battery = round(min(100,max(0,100.0 * (charge - 9.45) / (12.375 - 9.45))))
         _LOGGER.debug(f"Battery: {charge} {roller_battery}")
         # unknown
         unknown, ptr = utils.unpack_bytes(message, ptr, 8)
