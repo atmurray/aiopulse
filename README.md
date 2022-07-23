@@ -24,4 +24,5 @@ Alternatively, download and extract a release and from within the folder contain
 |stop [hub id] [blind id]               | Stop blind|
 |moveto [hub id] [blind id] [% closed]  | Open blind to percentage|
 |health [hub id] [blind id]             | Update the health of the blind|
+|log [level]                            | Set the log level to one of (critical,error,warning,info,debug)|
 |exit                                   | Exit program|
