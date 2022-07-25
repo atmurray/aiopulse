@@ -268,8 +268,11 @@ class Hub:
         roller_name, ptr = utils.unpack_string(message, ptr)
         ptr += 10  # unknown field
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
+        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
         ptr += 5  # unknown field
+        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
         ptr += 5  # unknown field
+        _LOGGER.info(utils.unpack_bytes(message, ptr, 1))
         roller_percent, ptr = utils.unpack_int(message, ptr, 1)
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
         ptr += 2  # checksum
@@ -287,6 +290,7 @@ class Hub:
             roller.room = None
         roller.closed_percent = roller_percent
         roller.flags = roller_flags
+        _LOGGER.info(roller)
         roller.notify_callback()
         self.notify_callback(const.UpdateType.rollers)
 
@@ -327,8 +331,11 @@ class Hub:
             roller_name, ptr = utils.unpack_string(message, ptr)
             ptr += 8  # unknown field
             roller_serial, ptr = utils.unpack_string(message, ptr)
+            _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
             ptr += 5  # unknown field
+            _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
             ptr += 5  # unknown field
+            _LOGGER.info(utils.unpack_bytes(message, ptr, 1))
             roller_percent, ptr = utils.unpack_int(message, ptr, 1)
             roller_flags, ptr = utils.unpack_int(message, ptr, 1)
 
@@ -346,6 +353,7 @@ class Hub:
                 roller.room = None
             roller.closed_percent = roller_percent
             roller.flags = roller_flags            
+            _LOGGER.info(roller)
             roller.notify_callback()
 
         self.notify_callback(const.UpdateType.rollers)
@@ -439,7 +447,11 @@ class Hub:
         """Receive change of roller position information."""
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
-        ptr += 10
+        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
+        ptr += 5
+        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
+        ptr += 5
+        _LOGGER.info(utils.unpack_bytes(message, ptr, 1))
         roller_percent, ptr = utils.unpack_int(message, ptr, 1)
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
         if roller_id in self.rollers:
