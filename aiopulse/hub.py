@@ -451,7 +451,6 @@ class Hub:
         ptr += 5
         _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
         ptr += 5
-        _LOGGER.info(utils.unpack_bytes(message, ptr, 1).hex())
         _LOGGER.info(utils.unpack_bytes(message, ptr, 1)[0][0])
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
         if roller_id in self.rollers:
