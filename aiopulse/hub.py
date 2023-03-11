@@ -20,6 +20,7 @@ import aiopulse.transport
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class Hub:
     """Representation of an Acmeda Pulse Hub."""
 
@@ -27,7 +28,7 @@ class Hub:
         self, host=None, loop: Optional[asyncio.events.AbstractEventLoop] = None
     ):
         """Init the hub."""
-        self.loop: asyncio.events.AbstractEventLoop = (loop or asyncio.get_event_loop())
+        self.loop: asyncio.events.AbstractEventLoop = loop or asyncio.get_event_loop()
         self.topic = str.encode("Smart_Id1_y:")
         self.sequence = 4
         self.handshake = asyncio.Event()
@@ -93,9 +94,7 @@ class Hub:
         elif asyncio.iscoroutinefunction(check_target):
             task = self.loop.create_task(target(*args))
         else:
-            task = self.loop.run_in_executor(  # type: ignore
-                None, target, *args
-            )
+            task = self.loop.run_in_executor(None, target, *args)  # type: ignore
 
         return task
 
@@ -255,6 +254,20 @@ class Hub:
         self.ip_address, ptr = utils.unpack_string(message, ptr)
         self.notify_callback(const.UpdateType.info)
 
+    def unpack_roller_percent(self, message, ptr):
+        """Unpack roller close percentage."""
+        ptr += 4
+        roller_state, ptr = utils.unpack_bytes(message, ptr, 1)
+        ptr += 5  # unknown field
+        if roller_state == b"\x10":  # roller is open
+            ptr += 1  # unused percent field
+            return 0, ptr
+        elif roller_state == b"\x12":  # roller is closed
+            ptr += 1  # unused percent field
+            return 100, ptr
+        else:  # read roller percent
+            return utils.unpack_int(message, ptr, 1)
+
     def response_roller_updated(self, message):
         """Receive change of roller information."""
         ptr = 2  # sequence?
@@ -268,12 +281,7 @@ class Hub:
         roller_name, ptr = utils.unpack_string(message, ptr)
         ptr += 10  # unknown field
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
-        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
-        ptr += 5  # unknown field
-        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
-        ptr += 5  # unknown field
-        _LOGGER.info(utils.unpack_bytes(message, ptr, 1)[0][0])
-        roller_percent, ptr = utils.unpack_int(message, ptr, 1)
+        roller_percent, ptr = self.unpack_roller_percent(message, ptr)
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
         ptr += 2  # checksum
         if roller_id not in self.rollers:
@@ -331,12 +339,7 @@ class Hub:
             roller_name, ptr = utils.unpack_string(message, ptr)
             ptr += 8  # unknown field
             roller_serial, ptr = utils.unpack_string(message, ptr)
-            _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
-            ptr += 5  # unknown field
-            _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
-            ptr += 5  # unknown field
-            _LOGGER.info(utils.unpack_bytes(message, ptr, 1)[0][0])
-            roller_percent, ptr = utils.unpack_int(message, ptr, 1)
+            roller_percent, ptr = self.unpack_roller_percent(message, ptr)
             roller_flags, ptr = utils.unpack_int(message, ptr, 1)
 
             _LOGGER.debug(f"{binascii.hexlify(message[start:ptr])}")
@@ -352,7 +355,7 @@ class Hub:
             else:
                 roller.room = None
             roller.closed_percent = roller_percent
-            roller.flags = roller_flags            
+            roller.flags = roller_flags
             _LOGGER.info(roller)
             roller.notify_callback()
 
@@ -447,11 +450,7 @@ class Hub:
         """Receive change of roller position information."""
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
-        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
-        ptr += 5
-        _LOGGER.info(utils.unpack_bytes(message, ptr, 5))
-        ptr += 5
-        _LOGGER.info(utils.unpack_bytes(message, ptr, 1)[0][0])
+        roller_percent, ptr = self.unpack_roller_percent(message, ptr)
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
         if roller_id in self.rollers:
             self.rollers[roller_id].closed_percent = roller_percent
@@ -477,8 +476,10 @@ class Hub:
         # battery level
         charge, ptr = utils.unpack_int(message, ptr, 1)
         charge_fraction, ptr = utils.unpack_int(message, ptr, 1)
-        charge += charge_fraction/256.0
-        roller_battery = round(min(100,max(0,100.0 * (charge - 9.45) / (12.375 - 9.45))))
+        charge += charge_fraction / 256.0
+        roller_battery = round(
+            min(100, max(0, 100.0 * (charge - 9.45) / (12.375 - 9.45)))
+        )
         _LOGGER.debug(f"Battery: {charge} {roller_battery}")
         # unknown
         unknown, ptr = utils.unpack_bytes(message, ptr, 8)
@@ -490,7 +491,7 @@ class Hub:
             self.rollers[roller_id].notify_callback()
         if self.health_lock.locked():
             self.health_lock.release()
-            
+
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
         ptr = 0
@@ -629,7 +630,7 @@ class Hub:
                 except asyncio.TimeoutError:
                     _LOGGER.debug(
                         f"{self.host}: Receive timeout, sending ping keepalive"
-                    )                      
+                    )
                     self.send_command(const.COMMAND_PING)
                 except errors.InvalidResponseException:
                     _LOGGER.debug(
@@ -637,7 +638,7 @@ class Hub:
                     )
                     self.send_command(const.COMMAND_PING)
         except errors.NotConnectedException:
-            _LOGGER.debug(f"{self.host}: Disconnected, stopping parser") 
+            _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
 
     async def update(self):
         """Update all hub information (includes scenes, rooms, and rollers)."""
@@ -669,7 +670,7 @@ class Hub:
         await self.handshake.wait()
 
         await self.health_lock.acquire()
-        
+
         data = message_type + utils.pack_int(self.sequence, 2) + message
         checksum = bytes([sum(data) & 0xFF])
         self.sequence += 2
@@ -678,13 +679,13 @@ class Hub:
         buffer = command_header + utils.pack_int(length, 2) + data + checksum
         _LOGGER.debug(f"Sending buffer {binascii.hexlify(buffer)}")
         self.protocol.send(buffer)
-        
+
         try:
             await asyncio.wait_for(self.health_lock.acquire(), timeout=5.0)
 
         except asyncio.TimeoutError:
             _LOGGER.warn(f"{self.host}: Health-check timed out.")
-        
+
         if self.health_lock.locked():
             self.health_lock.release()
 
@@ -733,4 +734,3 @@ class Hub:
         self.rollers.clear()
         self.running = False
         await self.disconnect()
-
