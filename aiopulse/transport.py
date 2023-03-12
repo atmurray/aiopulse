@@ -49,7 +49,8 @@ class HubTransportUdp(HubTransportBase):
 
         loop = asyncio.get_event_loop()
         self.transport, self.protocol = await loop.create_datagram_endpoint(
-            lambda: self, remote_addr=(self.host, self.port),
+            lambda: self,
+            remote_addr=(self.host, self.port),
         )
 
     async def close(self):
@@ -83,9 +84,12 @@ class HubTransportUdpBroadcast(HubTransportUdp):
         sock = socket.socket(addrinfo[0], socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
+        sock.sendto(b"0", ("<broadcast>", 1500))
+
         loop = asyncio.get_event_loop()
         self.transport, self.protocol = await loop.create_datagram_endpoint(
-            lambda: self, sock=sock,
+            lambda: self,
+            sock=sock,
         )
 
 

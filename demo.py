@@ -12,6 +12,9 @@ from typing import (
     Optional,
 )
 
+logging.basicConfig()
+_LOGGER = logging.getLogger('aiopulse.hub')
+
 async def discover(prompt):
     """Task to discover all hubs on the local network."""
     print("Starting hub discovery")
