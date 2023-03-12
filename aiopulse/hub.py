@@ -15,7 +15,8 @@ import async_timeout
 import aiopulse.const as const
 import aiopulse.utils as utils
 import aiopulse.errors as errors
-import aiopulse.elements as elements
+
+# from aiopulse import Roller, Room, Scene, Timer
 import aiopulse.transport
 
 _LOGGER = logging.getLogger(__name__)
@@ -254,20 +255,6 @@ class Hub:
         self.ip_address, ptr = utils.unpack_string(message, ptr)
         self.notify_callback(const.UpdateType.info)
 
-    def unpack_roller_percent(self, message, ptr):
-        """Unpack roller close percentage."""
-        ptr += 4
-        roller_state, ptr = utils.unpack_bytes(message, ptr, 1)
-        ptr += 5  # unknown field
-        if roller_state == b"\x10":  # roller is open
-            ptr += 1  # unused percent field
-            return 0, ptr
-        elif roller_state == b"\x12":  # roller is closed
-            ptr += 1  # unused percent field
-            return 100, ptr
-        else:  # read roller percent
-            return utils.unpack_int(message, ptr, 1)
-
     def response_roller_updated(self, message):
         """Receive change of roller information."""
         ptr = 2  # sequence?
@@ -281,11 +268,11 @@ class Hub:
         roller_name, ptr = utils.unpack_string(message, ptr)
         ptr += 10  # unknown field
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
-        roller_percent, ptr = self.unpack_roller_percent(message, ptr)
+        roller_percent, ptr = utils.unpack_roller_percent(message, ptr)
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
         ptr += 2  # checksum
         if roller_id not in self.rollers:
-            self.rollers[roller_id] = elements.Roller(self, roller_id)
+            self.rollers[roller_id] = aiopulse.Roller(self, roller_id)
         roller = self.rollers[roller_id]
         roller.name = roller_name
         # doesn't seem to come through in update
@@ -317,7 +304,7 @@ class Hub:
             _, ptr = utils.unpack_bytes(message, ptr, 2)
             room_name, ptr = utils.unpack_string(message, ptr)
             if room_id not in self.rooms:
-                self.rooms[room_id] = elements.Room(self, room_id)
+                self.rooms[room_id] = aiopulse.Room(self, room_id)
             self.rooms[room_id].icon = icon
             self.rooms[room_id].name = room_name
         self.notify_callback(const.UpdateType.rooms)
@@ -339,12 +326,12 @@ class Hub:
             roller_name, ptr = utils.unpack_string(message, ptr)
             ptr += 8  # unknown field
             roller_serial, ptr = utils.unpack_string(message, ptr)
-            roller_percent, ptr = self.unpack_roller_percent(message, ptr)
+            roller_percent, ptr = utils.unpack_roller_percent(message, ptr)
             roller_flags, ptr = utils.unpack_int(message, ptr, 1)
 
             _LOGGER.debug(f"{binascii.hexlify(message[start:ptr])}")
             if roller_id not in self.rollers:
-                self.rollers[roller_id] = elements.Roller(self, roller_id)
+                self.rollers[roller_id] = aiopulse.Roller(self, roller_id)
             roller = self.rollers[roller_id]
             roller.name = roller_name
             roller.serial = roller_serial
@@ -380,7 +367,7 @@ class Hub:
                 _, ptr = utils.unpack_bytes(message, ptr)
 
             if scene_id not in self.scenes:
-                self.scenes[scene_id] = elements.Scene(self, scene_id)
+                self.scenes[scene_id] = aiopulse.Scene(self, scene_id)
             self.scenes[scene_id].icon = icon
             self.scenes[scene_id].name = scene_name
         _, ptr = utils.unpack_bytes(message, ptr, 2)
@@ -430,7 +417,7 @@ class Hub:
                 return
 
             if timer_id not in self.timers:
-                self.timers[timer_id] = elements.Timer(self, timer_id)
+                self.timers[timer_id] = aiopulse.Timer(self, timer_id)
             self.timers[timer_id].icon = icon
             self.timers[timer_id].name = timer_name
             self.timers[timer_id].state = state
@@ -450,12 +437,13 @@ class Hub:
         """Receive change of roller position information."""
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
-        roller_percent, ptr = self.unpack_roller_percent(message, ptr)
+        roller_percent, ptr = utils.unpack_roller_percent(message, ptr)
         roller_flags, ptr = utils.unpack_int(message, ptr, 1)
         if roller_id in self.rollers:
             self.rollers[roller_id].closed_percent = roller_percent
             self.rollers[roller_id].flags = roller_flags
             self.rollers[roller_id].notify_callback()
+            _LOGGER.info(self.rollers[roller_id])
 
     def response_rollerhealth(self, message):
         """Receive change of roller health information."""

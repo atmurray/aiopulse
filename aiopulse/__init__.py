@@ -2,7 +2,9 @@
 import logging
 
 from aiopulse.hub import Hub
-from aiopulse.elements import Roller, Room, Scene
+from aiopulse.roller import Roller
+from aiopulse.room import Room
+from aiopulse.scene import Scene
 from aiopulse.errors import (
     CannotConnectException,
     NotConnectedException,
