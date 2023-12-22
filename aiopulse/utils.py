@@ -25,7 +25,7 @@ def unpack_bytes(buffer, ptr, length=None):
 def unpack_string(buffer, ptr, length=None):
     """Unpack a specified number of characters from the buffer and advance the pointer"""
     str_new, ptr_new = unpack_bytes(buffer, ptr, length=None)
-    return (str_new.decode("utf-8"), ptr_new)
+    return (str_new.decode("utf-8", "ignore"), ptr_new)
 
 
 def unpack_roller_percent(buffer, ptr):
