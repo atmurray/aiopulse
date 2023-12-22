@@ -7,6 +7,8 @@ setup(
     version="0.4.5",
     license="apache-2.0",
     description="Python module for Rollease Acmeda Automate integration.",
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     author="Alan Murray",
     author_email="pypi@atmurray.net",
     url="https://github.com/atmurray/aiopulse",
