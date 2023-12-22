@@ -8,13 +8,12 @@
 # You can also reference a tag or branch, but the action may change without warning.
 
 name: Upload Python Package
-
 on:
   release:
     types: [published]
 
 jobs:
-  pypi-publish:
+  pypi-publish: 
     name: Upload release to PyPI
     runs-on: ubuntu-latest
     environment:
@@ -23,7 +22,28 @@ jobs:
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
-    # retrieve your distributions here
-
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: Install pypa/build
+      run: >-
+        python -m
+        pip install
+        build
+        --user
+    - name: Build a binary wheel and a source tarball
+      run: python -m build
+    - name: Store the distribution packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: python-package-distributions
+        path: dist/
     - name: Publish package distributions to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
