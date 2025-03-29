@@ -98,7 +98,7 @@ class Roller:
             + utils.pack_int(percent, 2)
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(
+        await self.hub.send_command(
             const.COMMAND_MOVE_TO, bytes.fromhex("2201"), message
         )
 
@@ -112,7 +112,7 @@ class Roller:
             + bytes.fromhex("10")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
     async def move_stop(self):
         """Send command to stop the roller."""
@@ -124,7 +124,7 @@ class Roller:
             + bytes.fromhex("11")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
     async def move_down(self):
         """Send command to move the roller to fully closed."""
@@ -136,7 +136,7 @@ class Roller:
             + bytes.fromhex("12")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
     async def get_health(self):
         """."""
