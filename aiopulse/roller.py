@@ -1,9 +1,13 @@
 """Elements that hang off the hub."""
+
 from typing import List, Callable
 
 import aiopulse.utils as utils
 import aiopulse.const as const
 import asyncio
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Roller:
@@ -38,13 +42,20 @@ class Roller:
     async def health_updater(self):
         await self.get_health()
         running = True
-        while running:
-            try:
-                await asyncio.wait_for(self.health_lock, timeout=3600)
-            except asyncio.TimeoutError:
-                await self.get_health()
-            except asyncio.CancelledError:
-                running = False
+        try:
+            while running:
+                try:
+                    await asyncio.wait_for(self.health_lock.acquire(), timeout=3600)
+                except asyncio.TimeoutError:
+                    await self.get_health()
+                except asyncio.CancelledError:
+                    running = False
+        except Exception as inst:
+            _LOGGER.error(
+                f"{self.hub.host}:{self.name}: health updater unhandled exception: {inst}"
+            )
+        _LOGGER.info(f"{self.hub.host}:{self.name}: health updater stopped")
+        running = False
 
     def __str__(self):
         """Returns string representation of roller."""
@@ -87,7 +98,7 @@ class Roller:
             + utils.pack_int(percent, 2)
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(
+        await self.hub.send_command(
             const.COMMAND_MOVE_TO, bytes.fromhex("2201"), message
         )
 
@@ -101,7 +112,7 @@ class Roller:
             + bytes.fromhex("10")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
     async def move_stop(self):
         """Send command to stop the roller."""
@@ -113,7 +124,7 @@ class Roller:
             + bytes.fromhex("11")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
     async def move_down(self):
         """Send command to move the roller to fully closed."""
@@ -125,7 +136,7 @@ class Roller:
             + bytes.fromhex("12")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_payload(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
 
     async def get_health(self):
         """."""

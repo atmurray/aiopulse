@@ -1,4 +1,5 @@
 """Acmeda Pulse Hub Interface."""
+
 import asyncio
 import binascii
 import logging
@@ -33,6 +34,7 @@ class Hub:
         self.topic = str.encode("Smart_Id1_y:")
         self.sequence = 4
         self.handshake = asyncio.Event()
+        self.command_lock = asyncio.Lock()
         self.health_lock = asyncio.Lock()
         self.response_task = None
         self.running = False
@@ -46,10 +48,10 @@ class Hub:
 
         self.protocol = aiopulse.transport.HubTransportTcp(host)
 
-        self.rollers = {}
-        self.rooms = {}
-        self.scenes = {}
-        self.timers = {}
+        self.rollers: dict[int, aiopulse.Roller] = {}
+        self.rooms: dict[int, aiopulse.Room] = {}
+        self.scenes: dict[int, aiopulse.Scene] = {}
+        self.timers: dict[int, aiopulse.Timer] = {}
 
         self.handshake.clear()
         self.update_callbacks: List[Callable] = []
@@ -170,33 +172,41 @@ class Hub:
             return False
 
         if self.protocol.is_udp:  # udp
-            # self.send_command(const.COMMAND_DISCOVER)
+            # self.protocol.send(const.HEADER + const.COMMAND_DISCOVER)
             # response = await self.get_response()
-            self.send_command(const.COMMAND_CONNECT)
+            self.protocol.send(const.HEADER + const.COMMAND_CONNECT)
             raw_id = await self.get_response(const.RESPONSE_CONNECT)
         else:  # TCP
-            self.send_command(const.COMMAND_CONNECT)
+            self.protocol.send(const.HEADER + const.COMMAND_CONNECT)
             raw_id = await self.get_response(const.RESPONSE_CONNECT)
 
         self.id = raw_id[2:].decode("utf-8")
 
-        self.send_command(const.COMMAND_LOGIN + raw_id)
+        self.protocol.send(const.HEADER + const.COMMAND_LOGIN + raw_id)
         response = await self.get_response(const.RESPONSE_LOGIN)
 
         if response[0] != 0:
             raise errors.InvalidResponseException
 
-        self.send_command(
-            const.COMMAND_SETID,
-            bytes.fromhex("16000e0001000000000000000c000600120311073816ff9b"),
+        self.protocol.send(
+            const.HEADER
+            + const.COMMAND_SETID
+            + bytes.fromhex("05")
+            + self.topic
+            + bytes.fromhex("16000e0001000000000000000c000600120311073816ff9b")
         )
+
         response = await self.get_response(const.RESPONSE_SETID)
         self.response_parse(response)
 
-        self.send_command(
-            const.COMMAND_UNKNOWN1,
-            bytes.fromhex("1100150002000000000000006002010030ffa9"),
+        self.protocol.send(
+            const.HEADER
+            + const.COMMAND_UNKNOWN1
+            + bytes.fromhex("05")
+            + self.topic
+            + bytes.fromhex("1100150002000000000000006002010030ffa9")
         )
+
         response = await self.get_response(
             const.RESPONSE_UNKNOWN1
             + bytes.fromhex("06")
@@ -219,15 +229,6 @@ class Hub:
         await self.protocol.close()
         self.handshake.clear()
         _LOGGER.info(f"{self.host}: Disconnected")
-
-    def send_command(self, command, message=None):
-        """Send a command to the hub."""
-        if message:
-            self.protocol.send(
-                const.HEADER + command + bytes.fromhex("05") + self.topic + message
-            )
-        else:
-            self.protocol.send(const.HEADER + command)
 
     async def get_response(self, target_response=None):
         """Get a response, throw exception if it doesn't match expected response."""
@@ -549,6 +550,10 @@ class Hub:
                     binascii.hexlify(mtype),
                     binascii.hexlify(message),
                 )
+        else:
+            """message is the acknowledgement of a command"""
+            if self.command_lock.locked():
+                self.command_lock.release()
 
     respmap = {
         22: Receiver("ping", rec_ping),
@@ -607,37 +612,33 @@ class Hub:
 
     async def response_parser(self):
         """Receive a response from the hub and work out what message it is."""
-        try:
-            _LOGGER.debug(f"{self.host}: Starting response parser")
-            while self.handshake.is_set():
-                try:
-                    with async_timeout.timeout(30):
-                        response = await self.get_response()
-                    if len(response) > 0:
-                        self.response_parse(response)
-                except asyncio.TimeoutError:
-                    _LOGGER.debug(
-                        f"{self.host}: Receive timeout, sending ping keepalive"
-                    )
-                    self.send_command(const.COMMAND_PING)
-                except errors.InvalidResponseException:
-                    _LOGGER.debug(
-                        f"{self.host}: Invalid response, sending ping keepalive"
-                    )
-                    self.send_command(const.COMMAND_PING)
-        except errors.NotConnectedException:
-            _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
+        _LOGGER.debug(f"{self.host}: Starting response parser")
+        while self.handshake.is_set():
+            """Only catch exceptions that can be recovered from without reconnecting"""
+            try:
+                with async_timeout.timeout(30):
+                    response = await self.get_response()
+                if len(response) > 0:
+                    self.response_parse(response)
+            except asyncio.TimeoutError:
+                _LOGGER.debug(f"{self.host}: Receive timeout, sending ping keepalive")
+                self.protocol.send(const.HEADER + const.COMMAND_PING)
+            except errors.InvalidResponseException:
+                _LOGGER.debug(f"{self.host}: Invalid response, sending ping keepalive")
+                self.protocol.send(const.HEADER + const.COMMAND_PING)
 
     async def update(self):
         """Update all hub information (includes scenes, rooms, and rollers)."""
-        await self.send_payload(
+        await self.send_command(
             const.COMMAND_GET_HUB_INFO,
             bytes.fromhex("F000"),
             bytes.fromhex("000000000000FF"),
         )
         _LOGGER.debug(f"{self.host}: Hub update command sent")
 
-    async def send_payload(self, command, message_type, message):
+    async def send_command(
+        self, command, message_type, message, timeout=3.0, retries=3
+    ):
         """Send payload to the hub."""
         if not self.running:
             raise errors.NotRunningException
@@ -649,30 +650,35 @@ class Hub:
         length = len(data) + 1  # bytes.fromhex('0C00')
         buffer = command_header + utils.pack_int(length, 2) + data + checksum
         _LOGGER.debug(f"Sending buffer {binascii.hexlify(buffer)}")
-        self.protocol.send(buffer)
+
+        await self.command_lock.acquire()
+
+        attempt = 0
+        while attempt < retries:
+            self.protocol.send(buffer)
+
+            try:
+                await asyncio.wait_for(self.command_lock.acquire(), timeout=timeout)
+                _LOGGER.info(f"{self.host}: command successful.")
+                break
+            except asyncio.TimeoutError:
+                attempt += 1
+                _LOGGER.warning(f"{self.host}: command timed out.")
+
+        if self.command_lock.locked():
+            self.command_lock.release()
 
     async def send_healthcheck(self, command, message_type, message):
         """Send payload to the hub."""
-        if not self.running:
-            raise errors.NotRunningException
-        await self.handshake.wait()
-
         await self.health_lock.acquire()
 
-        data = message_type + utils.pack_int(self.sequence, 2) + message
-        checksum = bytes([sum(data) & 0xFF])
-        self.sequence += 2
-        command_header = const.HEADER + command + bytes.fromhex("05") + self.topic
-        length = len(data) + 1  # bytes.fromhex('0C00')
-        buffer = command_header + utils.pack_int(length, 2) + data + checksum
-        _LOGGER.debug(f"Sending buffer {binascii.hexlify(buffer)}")
-        self.protocol.send(buffer)
+        await self.send_command(command, message_type, message)
 
         try:
             await asyncio.wait_for(self.health_lock.acquire(), timeout=5.0)
 
         except asyncio.TimeoutError:
-            _LOGGER.warn(f"{self.host}: Health-check timed out.")
+            _LOGGER.warning(f"{self.host}: Health-check timed out.")
 
         if self.health_lock.locked():
             self.health_lock.release()
@@ -690,7 +696,8 @@ class Hub:
             try:
                 _LOGGER.info(f"{self.host}: Connecting")
                 await self.connect()
-                await self.update()
+                # await self.update()
+                self.async_add_job(self.update)
                 await self.response_parser()
             except errors.CannotConnectException as inst:
                 _LOGGER.warning(f"{self.host}: Connect failed {inst}")
@@ -699,6 +706,10 @@ class Hub:
                 await self.disconnect()
             except errors.InvalidResponseException as inst:
                 _LOGGER.warning(f"{self.host}: Protocol error {inst}")
+            except errors.NotConnectedException:
+                _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
+            except OSError as inst:
+                _LOGGER.warning(f"{self.host}: Unexpected protocol failure: {inst}")
             except Exception as inst:
                 _LOGGER.error(f"{self.host}: Uncaught exception occurred: {inst}")
                 del self.protocol
