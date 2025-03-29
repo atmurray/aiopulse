@@ -1,4 +1,5 @@
 """Network transport abstraction for hub."""
+
 import logging
 import asyncio
 import socket
@@ -141,19 +142,26 @@ class HubTransportTcp(HubTransportBase):
 
     async def close(self):
         """Close the connection."""
-        if self.writer:
-            self.writer.close()
-            await self.writer.wait_closed()
+        try:
+            if self.writer:
+                self.writer.close()
+                await self.writer.wait_closed()
+                _LOGGER.debug(f"{self.host}: TCP buffer cleared.")
+        except Exception as inst:
+            _LOGGER.warning(f"{self.host}: Error closing writer cleanly: {inst}")
+        finally:
             self.writer = None
-            _LOGGER.debug(f"{self.host}: TCP buffer cleared.")
 
-        if self.transport:
-            self.transport.close()
-            _LOGGER.debug(f"{self.host}: TCP connection closed.")
-        elif self.connect_task and not self.connect_task.done():
-            self.connect_task.cancel()
-        else:
-            _LOGGER.warning(f"{self.host}: Not connected")
+        try:
+            if self.transport:
+                self.transport.close()
+                _LOGGER.debug(f"{self.host}: TCP connection closed.")
+            elif self.connect_task and not self.connect_task.done():
+                self.connect_task.cancel()
+            else:
+                _LOGGER.warning(f"{self.host}: Not connected")
+        except Exception as inst:
+            _LOGGER.warning(f"{self.host}: Error closing TCP socket cleanly: {inst}")
 
     def send(self, buffer):
         """Abstraction of the underlying transport to send a buffer."""

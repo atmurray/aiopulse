@@ -1,4 +1,5 @@
 """Acmeda Pulse Hub Interface."""
+
 import asyncio
 import binascii
 import logging
@@ -46,10 +47,10 @@ class Hub:
 
         self.protocol = aiopulse.transport.HubTransportTcp(host)
 
-        self.rollers = {}
-        self.rooms = {}
-        self.scenes = {}
-        self.timers = {}
+        self.rollers: dict[int, aiopulse.Roller] = {}
+        self.rooms: dict[int, aiopulse.Room] = {}
+        self.scenes: dict[int, aiopulse.Scene] = {}
+        self.timers: dict[int, aiopulse.Timer] = {}
 
         self.handshake.clear()
         self.update_callbacks: List[Callable] = []
@@ -607,26 +608,20 @@ class Hub:
 
     async def response_parser(self):
         """Receive a response from the hub and work out what message it is."""
-        try:
-            _LOGGER.debug(f"{self.host}: Starting response parser")
-            while self.handshake.is_set():
-                try:
-                    with async_timeout.timeout(30):
-                        response = await self.get_response()
-                    if len(response) > 0:
-                        self.response_parse(response)
-                except asyncio.TimeoutError:
-                    _LOGGER.debug(
-                        f"{self.host}: Receive timeout, sending ping keepalive"
-                    )
-                    self.send_command(const.COMMAND_PING)
-                except errors.InvalidResponseException:
-                    _LOGGER.debug(
-                        f"{self.host}: Invalid response, sending ping keepalive"
-                    )
-                    self.send_command(const.COMMAND_PING)
-        except errors.NotConnectedException:
-            _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
+        _LOGGER.debug(f"{self.host}: Starting response parser")
+        while self.handshake.is_set():
+            """Only catch exceptions that can be recovered from without reconnecting"""
+            try:
+                with async_timeout.timeout(30):
+                    response = await self.get_response()
+                if len(response) > 0:
+                    self.response_parse(response)
+            except asyncio.TimeoutError:
+                _LOGGER.debug(f"{self.host}: Receive timeout, sending ping keepalive")
+                self.send_command(const.COMMAND_PING)
+            except errors.InvalidResponseException:
+                _LOGGER.debug(f"{self.host}: Invalid response, sending ping keepalive")
+                self.send_command(const.COMMAND_PING)
 
     async def update(self):
         """Update all hub information (includes scenes, rooms, and rollers)."""
@@ -699,6 +694,10 @@ class Hub:
                 await self.disconnect()
             except errors.InvalidResponseException as inst:
                 _LOGGER.warning(f"{self.host}: Protocol error {inst}")
+            except errors.NotConnectedException:
+                _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
+            except OSError as inst:
+                _LOGGER.warning(f"{self.host}: Unexpected protocol failure: {inst}")
             except Exception as inst:
                 _LOGGER.error(f"{self.host}: Uncaught exception occurred: {inst}")
                 del self.protocol
