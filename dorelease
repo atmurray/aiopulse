@@ -1,0 +1,12 @@
+# pre requisites
+
+python -m pip install pip-tools bumpver build twine
+
+# steps
+
+pip-compile pyproject.toml
+pip-sync
+bumpver update --patch
+python -m pip install -e .
+python -m build
+twine upload -r testpypi dist/\*
