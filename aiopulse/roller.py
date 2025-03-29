@@ -1,9 +1,13 @@
 """Elements that hang off the hub."""
+
 from typing import List, Callable
 
 import aiopulse.utils as utils
 import aiopulse.const as const
 import asyncio
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Roller:
@@ -38,13 +42,20 @@ class Roller:
     async def health_updater(self):
         await self.get_health()
         running = True
-        while running:
-            try:
-                await asyncio.wait_for(self.health_lock, timeout=3600)
-            except asyncio.TimeoutError:
-                await self.get_health()
-            except asyncio.CancelledError:
-                running = False
+        try:
+            while running:
+                try:
+                    await asyncio.wait_for(self.health_lock.acquire(), timeout=3600)
+                except asyncio.TimeoutError:
+                    await self.get_health()
+                except asyncio.CancelledError:
+                    running = False
+        except Exception as inst:
+            _LOGGER.error(
+                f"{self.hub.host}:{self.name}: health updater unhandled exception: {inst}"
+            )
+        _LOGGER.info(f"{self.hub.host}:{self.name}: health updater stopped")
+        running = False
 
     def __str__(self):
         """Returns string representation of roller."""
