@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch, call
 
 import pytest
@@ -14,36 +13,11 @@ from aiopulse.errors import (
     InvalidResponseException,
 )
 
+
 # Helper to create a valid parseable ping response payload
 def _ping_response():
     """HEADER + msg_len=3 + unknown(2) + mtype=22(ping)"""
     return const.HEADER + b"\x03\x00\x00\x16"
-
-
-# A context manager that counts enter/exit and raises TimeoutError after a limit
-class _CountingTimeout:
-    _counter = 0
-
-    def __init__(self, timeout):
-        self.timeout = timeout
-
-    def __enter__(self):
-        _CountingTimeout._counter += 1
-        if _CountingTimeout._counter > 1000:
-            raise asyncio.TimeoutError()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is asyncio.TimeoutError:
-            return True
-        return False
-
-
-@pytest.fixture()
-def patch_async_timeout():
-    _CountingTimeout._counter = 0
-    with patch("aiopulse.hub.async_timeout.timeout", _CountingTimeout):
-        yield
 
 
 class TestHubInit:
@@ -664,16 +638,21 @@ class TestHubDiscover:
     @pytest.mark.asyncio
     async def test_discover_sets_up_broadcast_client(self):
         with patch.object(aiopulse.transport, "HubTransportUdpBroadcast") as mock_cls:
+
+            async def _receive():
+                await asyncio.sleep(0.001)
+                raise asyncio.TimeoutError
+
             mock_client = MagicMock()
             mock_client.connect = AsyncMock()
             mock_client.send = MagicMock()
-            mock_client.receive = AsyncMock(side_effect=asyncio.TimeoutError)
+            mock_client.receive = AsyncMock(side_effect=_receive)
             mock_client.close = AsyncMock()
             mock_cls.return_value = mock_client
 
             gen = Hub.discover(timeout=0.01)
             try:
-                await asyncio.wait_for(gen.__anext__(), timeout=0.5)
+                await asyncio.wait_for(gen.__anext__(), timeout=2.0)
             except (StopAsyncIteration, asyncio.TimeoutError):
                 pass
             finally:
@@ -687,17 +666,21 @@ class TestHubDiscover:
         with patch.object(aiopulse.transport, "HubTransportUdpBroadcast") as mock_cls, \
              patch.object(aiopulse.transport, "HubTransportTcp") as mock_tcp_cls:
 
+            async def _receive():
+                await asyncio.sleep(0.001)
+                return (b"response", ("192.168.1.100", 12414))
+
             mock_client = MagicMock()
             mock_client.connect = AsyncMock()
             mock_client.send = MagicMock()
-            mock_client.receive = AsyncMock()
-            mock_client.receive.return_value = (b"response", ("192.168.1.100", 12414))
+            mock_client.receive = AsyncMock(side_effect=_receive)
             mock_client.close = AsyncMock()
             mock_cls.return_value = mock_client
 
             ping = _ping_response()
             mock_tcp = MagicMock()
             mock_tcp.is_udp = False
+            mock_tcp.connect = AsyncMock()
             mock_tcp.send = MagicMock()
             mock_tcp.receive = AsyncMock()
             mock_tcp.receive.side_effect = [
@@ -728,11 +711,14 @@ class TestHubDiscover:
         with patch.object(aiopulse.transport, "HubTransportUdpBroadcast") as mock_cls, \
              patch.object(aiopulse.transport, "HubTransportTcp") as mock_tcp_cls:
 
+            async def _receive():
+                await asyncio.sleep(0.001)
+                return (b"response", ("192.168.1.100", 12414))
+
             mock_client = MagicMock()
             mock_client.connect = AsyncMock()
             mock_client.send = MagicMock()
-            mock_client.receive = AsyncMock()
-            mock_client.receive.return_value = (b"response", ("192.168.1.100", 12414))
+            mock_client.receive = AsyncMock(side_effect=_receive)
             mock_client.close = AsyncMock()
             mock_cls.return_value = mock_client
 
@@ -744,7 +730,7 @@ class TestHubDiscover:
             gen = Hub.discover(timeout=0.01)
             hubs = []
             try:
-                hub = await asyncio.wait_for(gen.__anext__(), timeout=0.5)
+                hub = await asyncio.wait_for(gen.__anext__(), timeout=2.0)
                 hubs.append(hub)
             except (StopAsyncIteration, asyncio.TimeoutError):
                 pass

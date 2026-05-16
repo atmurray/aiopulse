@@ -120,14 +120,14 @@ class Hub:
         retries = 3
 
         try:
-            with async_timeout.timeout(timeout * retries):
+            async with async_timeout.timeout(timeout * retries):
                 for _ in range(1):
                     discover_client.send(const.HEADER + const.COMMAND_DISCOVER)
                     # discover_client.send(bytes.fromhex("000000030300001b"))
                     while True:
                         addr = None
                         try:
-                            with async_timeout.timeout(timeout):
+                            async with async_timeout.timeout(timeout):
                                 (response, addr) = await discover_client.receive()
                         except asyncio.TimeoutError:
                             pass
@@ -616,7 +616,7 @@ class Hub:
         while self.handshake.is_set():
             """Only catch exceptions that can be recovered from without reconnecting"""
             try:
-                with async_timeout.timeout(30):
+                async with async_timeout.timeout(30):
                     response = await self.get_response()
                 if len(response) > 0:
                     self.response_parse(response)
