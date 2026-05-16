@@ -74,8 +74,10 @@ class TestHubAsyncAddJob:
         async def fake_coro():
             pass
 
-        task = hub.async_add_job(fake_coro())
+        coro = fake_coro()
+        task = hub.async_add_job(coro)
         assert task is not None
+        coro.close()
 
     def test_async_add_job_coroutine_function(self, hub):
         async def fake_func():
