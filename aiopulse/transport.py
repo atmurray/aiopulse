@@ -16,7 +16,7 @@ class HubTransportBase(asyncio.Protocol):
         """Constructor for the base transport class."""
         self.transport = None
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: asyncio.Transport):
         """Called when a connection is made."""
         _LOGGER.debug("Connection established")
         self.transport = transport
