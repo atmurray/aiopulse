@@ -3,6 +3,7 @@
 import logging
 import asyncio
 import socket
+import psutil
 
 from aiopulse.errors import NotConnectedException
 
@@ -87,13 +88,14 @@ class HubTransportUdpBroadcast(HubTransportUdp):
         Args:
             host: Broadcast address (default 255.255.255.255).
             bind_address: Local interface to bind to (e.g., '10.0.0.24').
-                         If None, binds to all interfaces (0.0.0.0).
+                         If None, sends broadcast on all interfaces.
         """
         if host:
             self.host = host
         addrinfo = socket.getaddrinfo(self.host, None)[0]
         sock = socket.socket(addrinfo[0], socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         # Bind to specific interface if provided
         if bind_address:
@@ -108,6 +110,46 @@ class HubTransportUdpBroadcast(HubTransportUdp):
             lambda: self,
             sock=sock,
         )
+
+    def send(self, buffer):
+        """Send buffer - on all interfaces for broadcast, or main socket otherwise."""
+        if not self.transport:
+            raise NotConnectedException("UDP transport not connected")
+
+        # For broadcast, send on all interfaces
+        if self.host == "255.255.255.255":
+            self._send_to_all_interfaces(buffer)
+        else:
+            self.transport.sendto(buffer, (self.host, self.port))
+
+    def _send_to_all_interfaces(self, buffer):
+        """Send buffer on all available network interfaces."""
+        try:
+            interfaces = []
+            for name, addrs in psutil.net_if_addrs().items():
+                for addr in addrs:
+                    if addr.family == socket.AF_INET:
+                        interfaces.append(addr.address)
+
+            _LOGGER.debug(f"Sending on {len(interfaces)} interfaces: {interfaces}")
+
+            # Get the main socket's port
+            main_port = self.transport.get_extra_info('sockname')[1]
+
+            for ip in interfaces:
+                if not ip.startswith("127.") and not ip.startswith("169.254."):
+                    try:
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        sock.bind((ip, main_port))
+                        sock.sendto(buffer, (self.host, self.port))
+                        sock.close()
+                        _LOGGER.debug(f"Sent {len(buffer)} bytes on interface {ip}")
+                    except Exception as e:
+                        _LOGGER.debug(f"Failed to send on interface {ip}: {e}")
+        except Exception as e:
+            _LOGGER.debug(f"Error sending to all interfaces: {e}")
 
 
 class HubTransportTcp(HubTransportBase):
