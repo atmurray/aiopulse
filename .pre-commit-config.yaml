@@ -1,14 +1,26 @@
 repos:
   - repo: https://github.com/psf/black
-    rev: 19.10b0
+    rev: 24.4.2
     hooks:
       - id: black
         args:
           - --safe
           - --quiet
         files: ^((aiopulse)/.+)?[^/]+\.py$
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args:
+          - --fix
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        files: ^aiopulse/.+\.py$
   - repo: https://github.com/codespell-project/codespell
-    rev: v1.16.0
+    rev: v2.2.6
     hooks:
       - id: codespell
         args:
@@ -16,14 +28,3 @@ repos:
           - --skip="./.*,*.json"
           - --quiet-level=2
         exclude_types: [json]
-  - repo: https://gitlab.com/pycqa/flake8
-    rev: 3.7.9
-    hooks:
-      - id: flake8
-        additional_dependencies:
-          - flake8-docstrings==1.5.0
-          - pydocstyle==5.0.2
-        files: ^((aiopulse)/.+)?[^/]+\.py$
-        args:
-          - --max-line-length=88
-          - --ignore=D401,E203,W503
