@@ -1,10 +1,9 @@
 """Acmeda Pulse Hub Interface."""
 
 import asyncio
-import binascii
 import logging
 import warnings
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 
 import async_timeout
 
@@ -23,7 +22,11 @@ _LOGGER = logging.getLogger(__name__)
 class Hub(CallbackMixin):
     """Representation of an Acmeda Pulse Hub."""
 
-    def __init__(self, host: str | None = None, loop: asyncio.events.AbstractEventLoop | None = None) -> None:
+    def __init__(
+        self,
+        host: str | None = None,
+        loop: asyncio.events.AbstractEventLoop | None = None,
+    ) -> None:
         """Init the hub."""
         super().__init__()
         if loop is not None:
@@ -70,7 +73,11 @@ class Hub(CallbackMixin):
         )
 
     @staticmethod
-    async def discover(timeout: int = 5, loop: asyncio.events.AbstractEventLoop | None = None, bind_address: str | None = None):  # type: ignore[misc, no-untyped-def]
+    async def discover(  # type: ignore[misc]
+        timeout: int = 5,
+        loop: asyncio.events.AbstractEventLoop | None = None,
+        bind_address: str | None = None,
+    ) -> AsyncGenerator['Hub', None]:
         """Use a broadcast udp packet to find hubs on the lan.
 
         Args:
@@ -89,7 +96,7 @@ class Hub(CallbackMixin):
 
         try:
             async with async_timeout.timeout(timeout * retries):
-                 for _ in range(1):
+                for _ in range(1):
                     discover_client.send(
                         const.HEADER + CommandType.DISCOVER.to_bytes(4, "big")
                     )
@@ -409,6 +416,9 @@ class Hub(CallbackMixin):
                 percent, ptr = utils.unpack_int(message, ptr, 1)
                 _, ptr = utils.unpack_bytes(message, ptr, 5)
                 roller_id, ptr = utils.unpack_int(message, ptr, 6)
+                _LOGGER.debug(
+                    f"Timer {timer_id.hex()} is for roller {roller_id} at {percent}%"
+                )
                 if roller_id in self.rollers:
                     entity = self.rollers[roller_id]
             elif timer_type == b"\x00\x00\x10\x02":  # Scene Timer
@@ -417,8 +427,7 @@ class Hub(CallbackMixin):
                     entity = self.scenes[scene_id]
             else:
                 _LOGGER.error(
-                    f"{self.host}: Unexpected timer type received: "
-                    f"{timer_type.hex()}"
+                    f"{self.host}: Unexpected timer type received: {timer_type.hex()}"
                 )
                 return
 
@@ -516,12 +525,12 @@ class Hub(CallbackMixin):
     class Receiver:
         """Wraps around a function that gets called for received messages."""
 
-        def __init__(self, name: str, function: 'Callable[[Hub, bytes], None]') -> None:
+        def __init__(self, name: str, function: "Callable[[Hub, bytes], None]") -> None:
             """Constructor for message receiver class."""
             self.name = name
             self.function = function
 
-        def execute(self, target: 'Hub', message: bytes) -> None:
+        def execute(self, target: "Hub", message: bytes) -> None:
             """Executor function."""
             self.function(target, message)
 
@@ -589,9 +598,7 @@ class Hub(CallbackMixin):
             ptr = 0
             header, ptr = utils.unpack_bytes(response, ptr, 4)
             if header != bytes.fromhex("00000003"):
-                _LOGGER.warning(
-                    f"{self.host}: Unknown response: {response[0:4].hex()}"
-                )
+                _LOGGER.warning(f"{self.host}: Unknown response: {response[0:4].hex()}")
                 raise errors.InvalidResponseException
 
             try:
@@ -660,7 +667,12 @@ class Hub(CallbackMixin):
         _LOGGER.debug(f"{self.host}: Hub update command sent")
 
     async def send_command(
-        self, command: bytes, message_type: bytes, message: bytes, timeout: float = 3.0, retries: int = 3
+        self,
+        command: bytes,
+        message_type: bytes,
+        message: bytes,
+        timeout: float = 3.0,
+        retries: int = 3,
     ) -> None:
         """Send payload to the hub."""
         if not self.running:
@@ -691,7 +703,9 @@ class Hub(CallbackMixin):
         if self.command_lock.locked():
             self.command_lock.release()
 
-    async def send_healthcheck(self, command: bytes, message_type: bytes, message: bytes) -> None:
+    async def send_healthcheck(
+        self, command: bytes, message_type: bytes, message: bytes
+    ) -> None:
         """Send payload to the hub."""
         await self.health_lock.acquire()
 

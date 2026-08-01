@@ -1,21 +1,18 @@
 """Demo."""
 import asyncio
 import cmd
+import functools
 import logging
+from collections.abc import Callable
+from typing import Any
 
 import aiopulse
-import functools
-
-from typing import (
-    Any,
-    Callable,
-    Optional,
-)
 
 logging.basicConfig()
 _LOGGER = logging.getLogger('aiopulse.hub')
 
-async def discover(prompt):
+
+async def discover(prompt: 'HubPrompt') -> None:
     """Task to discover all hubs on the local network."""
     print("Starting hub discovery")
     async for hub in aiopulse.Hub.discover():
@@ -26,9 +23,9 @@ async def discover(prompt):
 class HubPrompt(cmd.Cmd):
     """Prompt command line class based on cmd."""
 
-    def __init__(self, event_loop):
+    def __init__(self, event_loop: asyncio.AbstractEventLoop) -> None:
         """Init command interface."""
-        self.hubs = {}
+        self.hubs: dict[str, aiopulse.Hub] = {}
         self.event_loop = event_loop
         self.running = True
         super().__init__()
@@ -45,7 +42,7 @@ class HubPrompt(cmd.Cmd):
 
     def async_add_job(
         self, target: Callable[..., Any], *args: Any
-    ) -> Optional[asyncio.Future]:
+    ) -> asyncio.Future[Any] | None:
         """Add a job from within the event loop.
 
         This method must be run in the event loop.
@@ -53,7 +50,7 @@ class HubPrompt(cmd.Cmd):
         target: target to call.
         args: parameters for method to call.
         """
-        task = None
+        task: asyncio.Future[Any] | None = None
 
         # Check for partials to properly determine if coroutine function
         check_target = target
@@ -61,49 +58,50 @@ class HubPrompt(cmd.Cmd):
             check_target = check_target.func
 
         if asyncio.iscoroutine(check_target):
-            task = self.event_loop.create_task(target)  # type: ignore
+            task = self.event_loop.create_task(target)  # type: ignore[arg-type]
         elif asyncio.iscoroutinefunction(check_target):
             task = self.event_loop.create_task(target(*args))
         else:
-            task = self.event_loop.run_in_executor(  # type: ignore
+            task = self.event_loop.run_in_executor(  # type: ignore[assignment]
                 None, target, *args
             )
 
         return task
 
-    def add_hub(self, hub):
+    def add_hub(self, hub: aiopulse.Hub) -> None:
         """Add a hub to the prompt."""
-        self.hubs[hub.id] = hub
-        hub.callback_subscribe(self.hub_update_callback)
+        if hub.id:
+            self.hubs[hub.id] = hub
+        hub.callback_subscribe(self.hub_update_callback)  # type: ignore[arg-type]
         print("Hub added to prompt")
 
-    async def hub_update_callback(self, update_type):
+    async def hub_update_callback(self, update_type: Any) -> None:
         """Called when a hub reports that its information is updated."""
         print(f"Hub {update_type.name} updated")
 
-    def _get_roller(self, args):
+    def _get_roller(self, args: list[str]) -> aiopulse.Roller | None:
         """Return roller based on string argument."""
         try:
             hub_id = int(args[0]) - 1
             roller_id = int(args[1]) - 1
             return list(list(self.hubs.values())[hub_id].rollers.values())[roller_id]
         except Exception:
-            print("Invalid arguments {}".format(args))
+            print(f"Invalid arguments {args}")
             return None
 
-    def default(self, line):
+    def default(self, line: str) -> None:
         """Handle unknown commands, including EOF."""
         if line == 'EOF':
             print("Exiting")
             self.running = False
-            return True
+            return
         super().default(line)
 
-    def do_discover(self, args):
+    def do_discover(self, args: str) -> None:
         """Command to discover all hubs on the local network."""
         self.add_job(discover, self)
 
-    def do_addhub(self, args):
+    def do_addhub(self, args: str) -> None:
         """Command to manually add a hub by IP address."""
         ip = args.strip()
         if not ip:
@@ -111,19 +109,19 @@ class HubPrompt(cmd.Cmd):
             return
         self.add_job(self._add_hub, ip)
 
-    async def _add_hub(self, ip):
+    async def _add_hub(self, ip: str) -> None:
         """Add a hub by IP address (runs in event loop)."""
         hub = aiopulse.Hub(ip)
         self.add_hub(hub)
         print(f"Hub at {ip} added")
 
-    def do_update(self, args):
+    def do_update(self, args: str) -> None:
         """Command to ask all hubs to send their information."""
         for hub in self.hubs.values():
-            print("Sending update command to hub {}".format(hub.id))
+            print(f"Sending update command to hub {hub.id}")
             self.add_job(hub.update)
 
-    def do_list(self, args):
+    def do_list(self, args: str) -> None:
         """Command to list all hubs, rollers, rooms, and scenes."""
         print("Listing hubs...")
         hub_id = 0
@@ -147,59 +145,59 @@ class HubPrompt(cmd.Cmd):
                 timer_id += 1
                 print(f"Timer {timer_id}: {timer}")
 
-    def do_moveto(self, sargs):
+    def do_moveto(self, sargs: str) -> None:
         """Command to tell a roller to move a % closed."""
         print("Sending move to")
         args = sargs.split()
         roller = self._get_roller(args)
         if roller:
             position = int(args[2])
-            print("Sending blind move to {}".format(roller.name))
+            print(f"Sending blind move to {roller.name}")
             self.add_job(roller.move_to, position)
 
-    def do_close(self, sargs):
+    def do_close(self, sargs: str) -> None:
         """Command to close a roller."""
         args = sargs.split()
         roller = self._get_roller(args)
         if roller:
-            print("Sending blind down to {}".format(roller.name))
+            print(f"Sending blind down to {roller.name}")
             self.add_job(roller.move_down)
 
-    def do_open(self, sargs):
+    def do_open(self, sargs: str) -> None:
         """Command to open a roller."""
         args = sargs.split()
         roller = self._get_roller(args)
         if roller:
-            print("Sending blind up to {}".format(roller.name))
+            print(f"Sending blind up to {roller.name}")
             self.add_job(roller.move_up)
 
-    def do_stop(self, sargs):
+    def do_stop(self, sargs: str) -> None:
         """Command to stop a moving roller."""
         args = sargs.split()
         roller = self._get_roller(args)
         if roller:
-            print("Sending blind stop to {}".format(roller.name))
+            print(f"Sending blind stop to {roller.name}")
             self.add_job(roller.move_stop)
 
-    def do_health(self, sargs):
+    def do_health(self, sargs: str) -> None:
         """Command to get health of a roller."""
         args = sargs.split()
         roller = self._get_roller(args)
         if roller:
-            print("Sending get health to {}".format(roller.name))
+            print(f"Sending get health to {roller.name}")
             self.add_job(roller.get_health)
 
-    def do_connect(self, sargs):
+    def do_connect(self, sargs: str) -> None:
         """Command to connect all hubs."""
         for hub in self.hubs.values():
             self.add_job(hub.run)
 
-    def do_disconnect(self, sargs):
+    def do_disconnect(self, sargs: str) -> None:
         """Command to disconnect all connected hubs."""
         for hub in self.hubs.values():
             self.add_job(hub.stop)
 
-    def do_log(self, sargs):
+    def do_log(self, sargs: str) -> None:
         """Change logging level."""
         if sargs == "critical":
             _LOGGER.setLevel(logging.CRITICAL)
@@ -219,13 +217,13 @@ class HubPrompt(cmd.Cmd):
         else:
             print("Valid log levels are critical, error, warning, info, and debug.")
 
-    def do_exit(self, arg):
+    def do_exit(self, arg: str) -> bool:
         """Command to exit."""
         print("Exiting")
         self.running = False
         return True
 
-    def cmdloop(self, intro=None):
+    def cmdloop(self, intro: str | None = None) -> None:
         """Override cmdloop to handle Ctrl+C and EOF."""
         try:
             super().cmdloop(intro)
@@ -238,7 +236,7 @@ class HubPrompt(cmd.Cmd):
             return
 
 
-async def main():
+async def main() -> None:
     """Test code."""
     event_loop = asyncio.get_running_loop()
 

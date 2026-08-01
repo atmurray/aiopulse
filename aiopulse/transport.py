@@ -1,9 +1,11 @@
 """Network transport abstraction for hub."""
 
-import logging
 import asyncio
+import logging
 import socket
-import psutil
+
+# psutil does not provide type stubs in this project; ignore typing for import
+import psutil  # type: ignore
 
 from aiopulse.errors import NotConnectedException
 
@@ -41,7 +43,9 @@ class HubTransportUdp(HubTransportBase):
         self.transport: asyncio.DatagramTransport | None = None  # type: ignore[assignment]
         self.protocol: asyncio.DatagramProtocol | None = None
         self.is_udp: bool = True
-        self.receive_queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = asyncio.Queue()
+        self.receive_queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = (
+            asyncio.Queue()
+        )
         super().__init__()
 
     async def connect(self, host: str | None = None) -> None:
@@ -83,7 +87,9 @@ class HubTransportUdp(HubTransportBase):
 class HubTransportUdpBroadcast(HubTransportUdp):
     """UDP Based Hub transport."""
 
-    async def connect(self, host: str = "255.255.255.255", bind_address: str | None = None) -> None:  # type: ignore[override]
+    async def connect(  # type: ignore[override]
+        self, host: str = "255.255.255.255", bind_address: str | None = None
+    ) -> None:
         """Init connection.
 
         Args:
@@ -129,10 +135,13 @@ class HubTransportUdpBroadcast(HubTransportUdp):
             interfaces: list[str] = []
             for name, addrs in psutil.net_if_addrs().items():
                 for addr in addrs:
+                    _LOGGER.debug(
+                        f"Interface {name} has address {addr.address} (family {addr.family})"
+                    )
                     if addr.family == socket.AF_INET:
                         interfaces.append(addr.address)
 
-            _LOGGER.debug(f"Sending on {len(interfaces)} interfaces: {interfaces}")
+            _LOGGER.info(f"Sending on {len(interfaces)} interfaces: {interfaces}")
 
             # Get the main socket's port
             if self.transport:
