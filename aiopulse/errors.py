@@ -1,10 +1,16 @@
 """Error classes of aiopulse module."""
+from __future__ import annotations
 
 
 class HubBaseException(Exception):
     """Base Exception for protocol."""
 
-    pass
+    def __init__(
+        self, message: str = "", response: bytes | None = None
+    ) -> None:
+        """Initialize exception with optional response context."""
+        super().__init__(message)
+        self.response = response
 
 
 class NotConnectedException(HubBaseException):
