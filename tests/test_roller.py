@@ -31,7 +31,11 @@ class TestRoller:
         assert roller.battery is None
         assert roller.closed_percent is None
         assert roller.flags == 0
-        assert roller.update_callbacks == []
+        assert roller._update_callbacks == []
+
+    def test_init_inherits_hub_entity(self, roller):
+        assert roller.hub is not None
+        assert roller.id == 123
 
     def test_str(self, roller):
         roller.name = "Test Blind"
@@ -54,24 +58,25 @@ class TestRoller:
     def test_callback_subscribe(self, roller):
         callback = MagicMock()
         roller.callback_subscribe(callback)
-        assert callback in roller.update_callbacks
+        assert callback in roller._update_callbacks
 
     def test_callback_unsubscribe(self, roller):
         callback = MagicMock()
-        roller.update_callbacks.append(callback)
+        roller._update_callbacks.append(callback)
         roller.callback_unsubscribe(callback)
-        assert callback not in roller.update_callbacks
+        assert callback not in roller._update_callbacks
 
     def test_callback_unsubscribe_not_found(self, roller):
         callback = MagicMock()
         roller.callback_unsubscribe(callback)
-        assert roller.update_callbacks == []
+        assert roller._update_callbacks == []
 
     def test_notify_callback(self, roller):
         callback = MagicMock()
-        roller.update_callbacks.append(callback)
-        roller.notify_callback()
-        roller.hub.async_add_job.assert_called_with(callback)
+        roller._update_callbacks.append(callback)
+        with patch.object(roller, "_schedule_callback") as mock_schedule:
+            roller.notify_callback()
+            mock_schedule.assert_called_once_with(callback)
 
     @pytest.mark.asyncio
     async def test_move_to(self, roller):

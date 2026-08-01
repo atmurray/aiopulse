@@ -1,63 +1,77 @@
-"""Elements that hang off the hub."""
+"""Roller blind entity that hangs off the hub."""
+from __future__ import annotations
 
-from typing import List, Callable
-
-import aiopulse.utils as utils
-import aiopulse.const as const
 import asyncio
 import logging
+from typing import TYPE_CHECKING
+
+import aiopulse.const as const
+import aiopulse.utils as utils
+from aiopulse.entities import HubEntity
+
+if TYPE_CHECKING:
+    from aiopulse.hub import Hub
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class Roller:
+class Roller(HubEntity):
     """Representation of a Roller blind."""
 
-    def __init__(self, hub, roller_id):
-        """Init a new roller blind."""
-        self.hub = hub
-        self.id = roller_id
-        self.name = None
-        self.type = None
-        self.serial = None
-        self.room_id = None
+    def __init__(self, hub: Hub, roller_id: int) -> None:
+        """Init a new roller blind.
+
+        Args:
+            hub: The hub instance.
+            roller_id: The unique roller identifier.
+        """
+        super().__init__(hub, roller_id)
+        self.type: int | None = None
+        self.serial: str | None = None
+        self.room_id: bytes | None = None
         self.room = None
-        self.battery = None
-        self.closed_percent = None
-        self.flags = 0
-        self.update_callbacks: List[Callable] = []
+        self.battery: int | None = None
+        self.closed_percent: int | None = None
+        self.flags: int = 0
 
         self.health_lock = asyncio.Lock()
         self.health_task = hub.async_add_job(self.health_updater)
 
-    def __del__(self):
-        self.health_task.cancel()
+    def __del__(self) -> None:
+        """Cancel health updater task on deletion."""
+        if self.health_task:
+            self.health_task.cancel()
 
-    def health_updated(self):
+    def health_updated(self) -> None:
+        """Signal that health data has been received."""
         try:
             self.health_lock.release()
         except RuntimeError:
             pass
 
-    async def health_updater(self):
+    async def health_updater(self) -> None:
+        """Periodically update roller health."""
         await self.get_health()
         running = True
         try:
             while running:
                 try:
-                    await asyncio.wait_for(self.health_lock.acquire(), timeout=3600)
+                    await asyncio.wait_for(
+                        self.health_lock.acquire(), timeout=3600
+                    )
                 except asyncio.TimeoutError:
                     await self.get_health()
                 except asyncio.CancelledError:
                     running = False
         except Exception as inst:
             _LOGGER.error(
-                f"{self.hub.host}:{self.name}: health updater unhandled exception: {inst}"
+                f"{self.hub.host}:{self.name}: health updater "
+                f"unhandled exception: {inst}"
             )
         _LOGGER.info(f"{self.hub.host}:{self.name}: health updater stopped")
         running = False
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Returns string representation of roller."""
         return (
             "Name: {} ID: {} Serial: {} Room: {} Type: {} Closed %: {} Battery %: {}"
@@ -73,22 +87,12 @@ class Roller:
             self.flags,
         )
 
-    def callback_subscribe(self, callback):
-        """Add a callback for hub updates."""
-        self.update_callbacks.append(callback)
+    async def move_to(self, percent: int) -> None:
+        """Send command to move the roller to a percentage closed.
 
-    def callback_unsubscribe(self, callback):
-        """Remove a callback for hub updates."""
-        if callback in self.update_callbacks:
-            self.update_callbacks.remove(callback)
-
-    def notify_callback(self):
-        """Tell callback that device has been updated."""
-        for callback in self.update_callbacks:
-            self.hub.async_add_job(callback)
-
-    async def move_to(self, percent):
-        """Send command to move the roller to a percentage closed."""
+        Args:
+            percent: Target position (0-100).
+        """
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
@@ -102,7 +106,7 @@ class Roller:
             const.COMMAND_MOVE_TO, bytes.fromhex("2201"), message
         )
 
-    async def move_up(self):
+    async def move_up(self) -> None:
         """Send command to move the roller to fully open."""
         message = (
             bytes.fromhex("0000000000000101")
@@ -112,9 +116,11 @@ class Roller:
             + bytes.fromhex("10")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(
+            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+        )
 
-    async def move_stop(self):
+    async def move_stop(self) -> None:
         """Send command to stop the roller."""
         message = (
             bytes.fromhex("0000000000000101")
@@ -124,9 +130,11 @@ class Roller:
             + bytes.fromhex("11")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(
+            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+        )
 
-    async def move_down(self):
+    async def move_down(self) -> None:
         """Send command to move the roller to fully closed."""
         message = (
             bytes.fromhex("0000000000000101")
@@ -136,10 +144,12 @@ class Roller:
             + bytes.fromhex("12")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(
+            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+        )
 
-    async def get_health(self):
-        """."""
+    async def get_health(self) -> None:
+        """Request health information from the roller."""
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
