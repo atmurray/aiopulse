@@ -118,7 +118,7 @@ class TestHubTransportUdpBroadcast:
 
             await transport.connect()
             assert transport.host == "255.255.255.255"
-            mock_sock_instance.setsockopt.assert_called_once()
+            assert mock_sock_instance.setsockopt.call_count == 2
             mock_loop.create_datagram_endpoint.assert_called_once()
 
 
