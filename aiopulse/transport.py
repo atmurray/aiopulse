@@ -92,8 +92,8 @@ class HubTransportUdpBroadcast(HubTransportUdp):
         """
         if host:
             self.host = host
-        addrinfo = socket.getaddrinfo(self.host, None)[0]
-        sock = socket.socket(addrinfo[0], socket.SOCK_DGRAM)
+        addrinfo = socket.getaddrinfo(self.host, None)
+        sock = socket.socket(addrinfo[0][0], socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -134,7 +134,7 @@ class HubTransportUdpBroadcast(HubTransportUdp):
             _LOGGER.debug(f"Sending on {len(interfaces)} interfaces: {interfaces}")
 
             # Get the main socket's port
-            main_port = self.transport.get_extra_info('sockname')[1]
+            main_port = self.transport.get_extra_info("sockname")[1]
 
             for ip in interfaces:
                 if not ip.startswith("127.") and not ip.startswith("169.254."):

@@ -8,5 +8,7 @@ pip-compile pyproject.toml
 pip-sync
 bumpver update --patch
 python -m pip install -e .
+rm dist/\*
 python -m build
 twine upload -r testpypi dist/\*
+twine upload -r pypi dist/\*

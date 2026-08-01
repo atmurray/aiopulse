@@ -91,9 +91,31 @@ class HubPrompt(cmd.Cmd):
             print("Invalid arguments {}".format(args))
             return None
 
+    def default(self, line):
+        """Handle unknown commands, including EOF."""
+        if line == 'EOF':
+            print("Exiting")
+            self.running = False
+            return True
+        super().default(line)
+
     def do_discover(self, args):
         """Command to discover all hubs on the local network."""
         self.add_job(discover, self)
+
+    def do_addhub(self, args):
+        """Command to manually add a hub by IP address."""
+        ip = args.strip()
+        if not ip:
+            print("Usage: addhub <ip address>")
+            return
+        self.add_job(self._add_hub, ip)
+
+    async def _add_hub(self, ip):
+        """Add a hub by IP address (runs in event loop)."""
+        hub = aiopulse.Hub(ip)
+        self.add_hub(hub)
+        print(f"Hub at {ip} added")
 
     def do_update(self, args):
         """Command to ask all hubs to send their information."""
@@ -203,6 +225,18 @@ class HubPrompt(cmd.Cmd):
         self.running = False
         return True
 
+    def cmdloop(self, intro=None):
+        """Override cmdloop to handle Ctrl+C and EOF."""
+        try:
+            super().cmdloop(intro)
+        except KeyboardInterrupt:
+            print("\nExiting")
+            self.running = False
+        except EOFError:
+            print("\nExiting")
+            self.running = False
+            return
+
 
 async def main():
     """Test code."""
@@ -211,13 +245,19 @@ async def main():
     prompt = HubPrompt(event_loop)
     prompt.prompt = "> "
 
-    tasks = [
-        event_loop.run_in_executor(None, prompt.cmdloop),
-    ]
+    task = event_loop.run_in_executor(None, prompt.cmdloop)
 
-    await asyncio.wait(tasks)
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    print("Program exited cleanly")
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
