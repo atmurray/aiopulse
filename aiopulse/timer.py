@@ -1,34 +1,39 @@
-"""Elements that hang off the hub."""
-from typing import List, Callable
+"""Timer entity that hangs off the hub."""
+from __future__ import annotations
 
-import aiopulse.utils as utils
-import aiopulse.const as const
-import asyncio
+from typing import TYPE_CHECKING
+
+from aiopulse.entities import HubEntity
+
+if TYPE_CHECKING:
+    from aiopulse.hub import Hub
 
 
-class Timer:
+class Timer(HubEntity):
     """Representation of a Timer."""
 
-    def __init__(self, hub, timer_id):
-        """Init a new timer."""
-        self.hub = hub
-        self.id = timer_id
-        self.icon = None
-        self.name = None
-        self.state = None
-        self.hour = None
-        self.minute = None
-        self.days = None
-        self.entity = None
+    def __init__(self, hub: Hub, timer_id: bytes) -> None:
+        """Init a new timer.
 
-    def __str__(self):
+        Args:
+            hub: The hub instance.
+            timer_id: The unique timer identifier.
+        """
+        super().__init__(hub, timer_id)
+        self.state: int | None = None
+        self.hour: int | None = None
+        self.minute: int | None = None
+        self.days: int | None = None
+        self.entity: HubEntity | None = None
+
+    def __str__(self) -> str:
         """Returns string representation of timer."""
         return (
             f"Name: {self.name} "
-            f"ID: {self.id[0:4]} "
+            f"ID: {self.id[0:4] if isinstance(self.id, bytes) else self.id} "
             f"Icon: {self.icon} "
             f"State: {self.state} "
             f"Time: {self.hour}:{self.minute} "
-            f"Days: {self.days:>07b} "
+            f"Days: {self.days:>07b} " if self.days is not None else "Days: None "
             f'Entity: {self.entity.name if self.entity else "None"}'
         )
