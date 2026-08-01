@@ -6,6 +6,7 @@ import pytest
 
 import aiopulse.transport
 import aiopulse.const as const
+from aiopulse.const import CommandType, ResponseType
 from aiopulse.hub import Hub
 from aiopulse.errors import (
     CannotConnectException,
@@ -101,11 +102,11 @@ class TestHubConnect:
         mock_transport.receive = AsyncMock()
         # Responses: CONNECT, LOGIN, SETID(->response_parse), UNKNOWN1(->response_parse), SETID(->response_parse)
         mock_transport.receive.side_effect = [
-            const.HEADER + const.RESPONSE_CONNECT + b"Hub123",
-            const.HEADER + const.RESPONSE_LOGIN + b"\x00",
-            const.HEADER + const.RESPONSE_SETID + _ping_response(),
-            const.HEADER + const.RESPONSE_UNKNOWN1 + bytes.fromhex("06") + hub.topic + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d") + _ping_response(),
-            const.HEADER + const.RESPONSE_SETID + _ping_response(),
+            const.HEADER + ResponseType.CONNECT.to_bytes(4, 'big') + b"Hub123",
+            const.HEADER + ResponseType.LOGIN.to_bytes(4, 'big') + b"\x00",
+            const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + _ping_response(),
+            const.HEADER + ResponseType.UNKNOWN1.to_bytes(4, 'big') + bytes.fromhex("06") + hub.topic + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d") + _ping_response(),
+            const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + _ping_response(),
         ]
 
         result = await hub.connect()
@@ -158,7 +159,7 @@ class TestHubGetResponse:
 
     @pytest.mark.asyncio
     async def test_get_response_matches(self, hub, mock_transport):
-        target = const.RESPONSE_CONNECT
+        target = ResponseType.CONNECT.to_bytes(4, 'big')
         raw = const.HEADER + target + b"extra"
         mock_transport.receive = AsyncMock(return_value=raw)
 
@@ -170,14 +171,14 @@ class TestHubGetResponse:
         mock_transport.receive = AsyncMock(return_value=b"\x00\x00")
 
         with pytest.raises(InvalidResponseException):
-            await hub.get_response(const.RESPONSE_CONNECT)
+            await hub.get_response(ResponseType.CONNECT.to_bytes(4, 'big'))
 
     @pytest.mark.asyncio
     async def test_get_response_wrong_header(self, hub, mock_transport):
         mock_transport.receive = AsyncMock(return_value=b"\xff\xff\xff\xff\x00\x00")
 
         with pytest.raises(InvalidResponseException):
-            await hub.get_response(const.RESPONSE_CONNECT)
+            await hub.get_response(ResponseType.CONNECT.to_bytes(4, 'big'))
 
 
 class TestHubResponseHandlers:
@@ -552,7 +553,9 @@ class TestHubResponseParser:
             await task
         except (asyncio.CancelledError, asyncio.TimeoutError):
             pass
-        mock_transport.send.assert_called_with(const.HEADER + const.COMMAND_PING)
+        mock_transport.send.assert_called_with(
+            const.HEADER + CommandType.PING.to_bytes(4, 'big')
+        )
 
     @pytest.mark.asyncio
     async def test_response_parser_invalid_response(self, hub, mock_transport):
@@ -573,7 +576,9 @@ class TestHubResponseParser:
             await task
         except (asyncio.CancelledError, asyncio.TimeoutError):
             pass
-        mock_transport.send.assert_called_with(const.HEADER + const.COMMAND_PING)
+        mock_transport.send.assert_called_with(
+            const.HEADER + CommandType.PING.to_bytes(4, 'big')
+        )
 
 
 class TestHubSendCommand:
@@ -582,7 +587,9 @@ class TestHubSendCommand:
         hub.running = False
         with pytest.raises(NotRunningException):
             await hub.send_command(
-                const.COMMAND_GET_HUB_INFO, bytes.fromhex("F000"), b"\x00" * 7
+                CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
+                bytes.fromhex("F000"),
+                b"\x00" * 7,
             )
 
     @pytest.mark.asyncio
@@ -596,7 +603,9 @@ class TestHubSendCommand:
         hub.command_lock.release = MagicMock()
 
         await hub.send_command(
-            const.COMMAND_GET_HUB_INFO, bytes.fromhex("F000"), b"\x00" * 7
+            CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
+            bytes.fromhex("F000"),
+            b"\x00" * 7,
         )
         assert mock_transport.send.call_count == 1
 
@@ -620,8 +629,11 @@ class TestHubSendCommand:
         hub.command_lock.release = MagicMock()
 
         await hub.send_command(
-            const.COMMAND_GET_HUB_INFO, bytes.fromhex("F000"), b"\x00" * 7,
-            timeout=0.01, retries=2
+            CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
+            bytes.fromhex("F000"),
+            b"\x00" * 7,
+            timeout=0.01,
+            retries=2,
         )
         assert mock_transport.send.call_count == 2
 
@@ -641,7 +653,9 @@ class TestHubSendHealthcheck:
         with patch.object(hub.health_lock, "acquire") as mock_acquire:
             mock_acquire.side_effect = [True, asyncio.TimeoutError]
             await hub.send_healthcheck(
-                const.GET_HEALTH, bytes.fromhex("2A01"), b"\x00" * 10
+                CommandType.GET_HEALTH.to_bytes(4, 'big'),
+                bytes.fromhex("2A01"),
+                b"\x00" * 10,
             )
             hub.send_command.assert_awaited_once()
 
@@ -771,11 +785,11 @@ class TestHubDiscover:
             mock_tcp.send = MagicMock()
             mock_tcp.receive = AsyncMock()
             mock_tcp.receive.side_effect = [
-                const.HEADER + const.RESPONSE_CONNECT + b"12",
-                const.HEADER + const.RESPONSE_LOGIN + b"\x00",
-                const.HEADER + const.RESPONSE_SETID + ping,
-                const.HEADER + const.RESPONSE_UNKNOWN1 + bytes.fromhex("06") + b"Smart_Id1_y:" + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d") + ping,
-                const.HEADER + const.RESPONSE_SETID + ping,
+                const.HEADER + ResponseType.CONNECT.to_bytes(4, 'big') + b"12",
+                const.HEADER + ResponseType.LOGIN.to_bytes(4, 'big') + b"\x00",
+                const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + ping,
+                const.HEADER + ResponseType.UNKNOWN1.to_bytes(4, 'big') + bytes.fromhex("06") + b"Smart_Id1_y:" + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d") + ping,
+                const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + ping,
             ]
             mock_tcp.close = AsyncMock()
             mock_tcp_cls.return_value = mock_tcp
@@ -836,7 +850,7 @@ class TestHubUpdate:
 
         await hub.update()
         hub.send_command.assert_awaited_once_with(
-            const.COMMAND_GET_HUB_INFO,
+            CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
             bytes.fromhex("F000"),
             bytes.fromhex("000000000000FF"),
         )

@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import aiopulse.utils as utils
-import aiopulse.const as const
 from aiopulse.entities import HubEntity
+from aiopulse.const import CommandType
 
 if TYPE_CHECKING:
     from aiopulse.hub import Hub
@@ -45,7 +45,7 @@ class Room(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            const.COMMAND_MOVE_TO, bytes.fromhex("2201"), message
+            CommandType.MOVE_TO.to_bytes(4, 'big'), bytes.fromhex("2201"), message
         )
 
     async def move_up(self) -> None:
@@ -59,7 +59,7 @@ class Room(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+            CommandType.MOVE.to_bytes(4, 'big'), bytes.fromhex("2201"), message
         )
 
     async def move_stop(self) -> None:
@@ -73,7 +73,7 @@ class Room(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+            CommandType.MOVE.to_bytes(4, 'big'), bytes.fromhex("2201"), message
         )
 
     async def move_down(self) -> None:
@@ -87,5 +87,5 @@ class Room(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+            CommandType.MOVE.to_bytes(4, 'big'), bytes.fromhex("2201"), message
         )

@@ -1,0 +1,140 @@
+# Task 7: Update Timer to Use HubEntity
+
+**Files:**
+- Modify: `aiopulse/timer.py`
+- Modify: `tests/test_timer.py`
+
+**Interfaces:**
+- Consumes: `HubEntity` from `aiopulse.entities`
+- Produces: `Timer` class inheriting from `HubEntity`
+
+- [ ] **Step 1: Update timer.py to use HubEntity**
+
+```python
+"""Timer entity that hangs off the hub."""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from aiopulse.entities import HubEntity
+
+if TYPE_CHECKING:
+    from aiopulse.hub import Hub
+
+
+class Timer(HubEntity):
+    """Representation of a Timer."""
+
+    def __init__(self, hub: Hub, timer_id: bytes) -> None:
+        """Init a new timer.
+
+        Args:
+            hub: The hub instance.
+            timer_id: The unique timer identifier.
+        """
+        super().__init__(hub, timer_id)
+        self.state: int | None = None
+        self.hour: int | None = None
+        self.minute: int | None = None
+        self.days: int | None = None
+        self.entity: HubEntity | None = None
+
+    def __str__(self) -> str:
+        """Returns string representation of timer."""
+        return (
+            f"Name: {self.name} "
+            f"ID: {self.id[0:4] if isinstance(self.id, bytes) else self.id} "
+            f"Icon: {self.icon} "
+            f"State: {self.state} "
+            f"Time: {self.hour}:{self.minute} "
+            f"Days: {self.days:>07b} "
+            f'Entity: {self.entity.name if self.entity else "None"}'
+        )
+```
+
+- [ ] **Step 2: Update test_timer.py for HubEntity**
+
+```python
+# tests/test_timer.py
+from unittest.mock import MagicMock
+
+import pytest
+
+from aiopulse.timer import Timer
+
+
+class TestTimer:
+    @pytest.fixture
+    def hub_mock(self):
+        hub = MagicMock()
+        hub.host = "192.168.1.100"
+        return hub
+
+    @pytest.fixture
+    def timer(self, hub_mock):
+        return Timer(hub_mock, b"\x01\x02\x03\x04")
+
+    def test_init(self, timer):
+        assert timer.id == b"\x01\x02\x03\x04"
+        assert timer.name is None
+        assert timer.icon is None
+        assert timer.state is None
+        assert timer.hour is None
+        assert timer.minute is None
+        assert timer.days is None
+        assert timer.entity is None
+        assert timer.hub is not None
+        assert timer._update_callbacks == []
+
+    def test_str(self, timer):
+        timer.name = "Morning Timer"
+        timer.icon = 2
+        timer.state = 1
+        timer.hour = 7
+        timer.minute = 30
+        timer.days = 0b0111110
+        result = str(timer)
+        assert "Morning Timer" in result
+        assert "7:30" in result
+
+    def test_str_with_entity(self, timer):
+        timer.name = "Morning Timer"
+        timer.entity = MagicMock()
+        timer.entity.name = "Living Room Blind"
+        result = str(timer)
+        assert "Living Room Blind" in result
+
+    def test_str_without_entity(self, timer):
+        timer.name = "Morning Timer"
+        result = str(timer)
+        assert "None" in result
+
+    def test_callback_subscribe(self, timer):
+        callback = MagicMock()
+        timer.callback_subscribe(callback)
+        assert callback in timer._update_callbacks
+
+    def test_callback_unsubscribe(self, timer):
+        callback = MagicMock()
+        timer._update_callbacks.append(callback)
+        timer.callback_unsubscribe(callback)
+        assert callback not in timer._update_callbacks
+
+    def test_notify_callback(self, timer):
+        callback = MagicMock()
+        timer._update_callbacks.append(callback)
+        timer.notify_callback()
+        callback.assert_called_once()
+```
+
+- [ ] **Step 3: Run tests to verify they pass**
+
+Run: `pytest tests/test_timer.py -v`
+Expected: All tests pass
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add aiopulse/timer.py tests/test_timer.py
+git commit -m "refactor: Timer inherits from HubEntity"
+```

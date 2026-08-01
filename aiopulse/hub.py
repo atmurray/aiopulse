@@ -14,6 +14,7 @@ import aiopulse.errors as errors
 import aiopulse.transport
 import aiopulse.utils as utils
 from aiopulse.callbacks import CallbackMixin
+from aiopulse.const import CommandType, ResponseType
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,9 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class Hub(CallbackMixin):
     """Representation of an Acmeda Pulse Hub."""
 
-    def __init__(
-        self, host=None, loop: asyncio.events.AbstractEventLoop | None = None
-    ):
+    def __init__(self, host=None, loop: asyncio.events.AbstractEventLoop | None = None):
         """Init the hub."""
         super().__init__()
         if loop is not None:
@@ -70,9 +69,7 @@ class Hub(CallbackMixin):
         )
 
     @staticmethod
-    async def discover(
-        timeout=5, loop: asyncio.events.AbstractEventLoop | None = None
-    ):
+    async def discover(timeout=5, loop: asyncio.events.AbstractEventLoop | None = None):
         """Use a broadcast udp packet to find hubs on the lan."""
         discover_client = aiopulse.transport.HubTransportUdpBroadcast()
 
@@ -85,13 +82,18 @@ class Hub(CallbackMixin):
         try:
             async with async_timeout.timeout(timeout * retries):
                 for _ in range(1):
-                    discover_client.send(const.HEADER + const.COMMAND_DISCOVER)
-                    # discover_client.send(bytes.fromhex("000000030300001b"))
+                    discover_client.send(
+                        const.HEADER + CommandType.DISCOVER.to_bytes(4, "big")
+                    )
+                    _LOGGER.info("Discovering hubs on the LAN...")
                     while True:
                         addr = None
                         try:
                             async with async_timeout.timeout(timeout):
                                 (response, addr) = await discover_client.receive()
+                                _LOGGER.debug(
+                                    f"{addr[0]}: Received discover response: {response}"
+                                )
                         except asyncio.TimeoutError:
                             pass
 
@@ -100,7 +102,8 @@ class Hub(CallbackMixin):
                             try:
                                 hub = Hub(addr[0], loop)
                                 discover_client.send(
-                                    const.HEADER + const.COMMAND_DISCOVER
+                                    const.HEADER
+                                    + CommandType.DISCOVER.to_bytes(4, "big")
                                 )
                                 await hub.connect()
                                 await hub.disconnect()
@@ -137,48 +140,48 @@ class Hub(CallbackMixin):
         if self.protocol.is_udp:  # udp
             # self.protocol.send(const.HEADER + const.COMMAND_DISCOVER)
             # response = await self.get_response()
-            self.protocol.send(const.HEADER + const.COMMAND_CONNECT)
-            raw_id = await self.get_response(const.RESPONSE_CONNECT)
+            self.protocol.send(const.HEADER + CommandType.CONNECT.to_bytes(4, "big"))
+            raw_id = await self.get_response(ResponseType.CONNECT.to_bytes(4, "big"))
         else:  # TCP
-            self.protocol.send(const.HEADER + const.COMMAND_CONNECT)
-            raw_id = await self.get_response(const.RESPONSE_CONNECT)
+            self.protocol.send(const.HEADER + CommandType.CONNECT.to_bytes(4, "big"))
+            raw_id = await self.get_response(ResponseType.CONNECT.to_bytes(4, "big"))
 
         self.id = raw_id[2:].decode("utf-8")
 
-        self.protocol.send(const.HEADER + const.COMMAND_LOGIN + raw_id)
-        response = await self.get_response(const.RESPONSE_LOGIN)
+        self.protocol.send(const.HEADER + CommandType.LOGIN.to_bytes(4, "big") + raw_id)
+        response = await self.get_response(ResponseType.LOGIN.to_bytes(4, "big"))
 
         if response[0] != 0:
             raise errors.InvalidResponseException
 
         self.protocol.send(
             const.HEADER
-            + const.COMMAND_SETID
+            + CommandType.SETID.to_bytes(4, "big")
             + bytes.fromhex("05")
             + self.topic
             + bytes.fromhex("16000e0001000000000000000c000600120311073816ff9b")
         )
 
-        response = await self.get_response(const.RESPONSE_SETID)
+        response = await self.get_response(ResponseType.SETID.to_bytes(4, "big"))
         self.response_parse(response)
 
         self.protocol.send(
             const.HEADER
-            + const.COMMAND_UNKNOWN1
+            + CommandType.UNKNOWN1.to_bytes(4, "big")
             + bytes.fromhex("05")
             + self.topic
             + bytes.fromhex("1100150002000000000000006002010030ffa9")
         )
 
         response = await self.get_response(
-            const.RESPONSE_UNKNOWN1
+            ResponseType.UNKNOWN1.to_bytes(4, "big")
             + bytes.fromhex("06")
             + self.topic
             + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d")
         )
         self.response_parse(response)
 
-        response = await self.get_response(const.RESPONSE_SETID)
+        response = await self.get_response(ResponseType.SETID.to_bytes(4, "big"))
         self.response_parse(response)
 
         _LOGGER.info(f"{self.host}: Handshake complete")
@@ -635,15 +638,15 @@ class Hub(CallbackMixin):
                     self.response_parse(response)
             except asyncio.TimeoutError:
                 _LOGGER.debug(f"{self.host}: Receive timeout, sending ping keepalive")
-                self.protocol.send(const.HEADER + const.COMMAND_PING)
+                self.protocol.send(const.HEADER + CommandType.PING.to_bytes(4, "big"))
             except errors.InvalidResponseException:
                 _LOGGER.debug(f"{self.host}: Invalid response, sending ping keepalive")
-                self.protocol.send(const.HEADER + const.COMMAND_PING)
+                self.protocol.send(const.HEADER + CommandType.PING.to_bytes(4, "big"))
 
     async def update(self):
         """Update all hub information (includes scenes, rooms, and rollers)."""
         await self.send_command(
-            const.COMMAND_GET_HUB_INFO,
+            CommandType.GET_HUB_INFO.to_bytes(4, "big"),
             bytes.fromhex("F000"),
             bytes.fromhex("000000000000FF"),
         )
