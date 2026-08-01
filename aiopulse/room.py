@@ -1,43 +1,40 @@
-"""Elements that hang off the hub."""
+"""Room entity that hangs off the hub."""
+from __future__ import annotations
 
-from typing import List, Callable
+from typing import TYPE_CHECKING
 
 import aiopulse.utils as utils
 import aiopulse.const as const
-import asyncio
+from aiopulse.entities import HubEntity
+
+if TYPE_CHECKING:
+    from aiopulse.hub import Hub
 
 
-class Room:
+class Room(HubEntity):
     """Representation of a Room."""
 
-    def __init__(self, hub, room_id):
-        """Init a new room."""
-        self.hub = hub
-        self.id = room_id
-        self.icon = None
-        self.name = None
-        self.update_callbacks: List[Callable] = []
+    def __init__(self, hub: Hub, room_id: bytes) -> None:
+        """Init a new room.
 
-    def __str__(self):
+        Args:
+            hub: The hub instance.
+            room_id: The unique room identifier.
+        """
+        super().__init__(hub, room_id)
+
+    def __str__(self) -> str:
         """Returns string representation of room."""
-        return "Name: {} ID: {} Icon: {}".format(self.name, self.id[0:4], self.icon)
+        return "Name: {} ID: {} Icon: {}".format(
+            self.name, self.id[0:4] if isinstance(self.id, bytes) else self.id, self.icon
+        )
 
-    def callback_subscribe(self, callback):
-        """Add a callback for hub updates."""
-        self.update_callbacks.append(callback)
+    async def move_to(self, percent: int) -> None:
+        """Send command to move the room to a percentage closed.
 
-    def callback_unsubscribe(self, callback):
-        """Remove a callback for hub updates."""
-        if callback in self.update_callbacks:
-            self.update_callbacks.remove(callback)
-
-    def notify_callback(self):
-        """Tell callback that device has been updated."""
-        for callback in self.update_callbacks:
-            self.hub.async_add_job(callback)
-
-    async def move_to(self, percent):
-        """Send command to move the roller to a percentage closed."""
+        Args:
+            percent: Target position (0-100).
+        """
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
@@ -51,8 +48,8 @@ class Room:
             const.COMMAND_MOVE_TO, bytes.fromhex("2201"), message
         )
 
-    async def move_up(self):
-        """Send command to move the roller to fully open."""
+    async def move_up(self) -> None:
+        """Send command to move the room to fully open."""
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
@@ -61,10 +58,12 @@ class Room:
             + bytes.fromhex("10")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(
+            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+        )
 
-    async def move_stop(self):
-        """Send command to stop the roller."""
+    async def move_stop(self) -> None:
+        """Send command to stop the room."""
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
@@ -73,10 +72,12 @@ class Room:
             + bytes.fromhex("11")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(
+            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+        )
 
-    async def move_down(self):
-        """Send command to move the roller to fully closed."""
+    async def move_down(self) -> None:
+        """Send command to move the room to fully closed."""
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
@@ -85,4 +86,6 @@ class Room:
             + bytes.fromhex("12")
             + bytes.fromhex("ff")
         )
-        await self.hub.send_command(const.COMMAND_MOVE, bytes.fromhex("2201"), message)
+        await self.hub.send_command(
+            const.COMMAND_MOVE, bytes.fromhex("2201"), message
+        )
