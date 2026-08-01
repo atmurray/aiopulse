@@ -1,35 +1,83 @@
-""" Serialisation / Deserialisation helpers """
+"""Serialisation / Deserialisation helpers."""
+from __future__ import annotations
 
 
-def unpack_int(buffer, ptr, length):
-    """Unpack an int of specified length from the buffer and advance the pointer"""
+def unpack_int(buffer: bytes, ptr: int, length: int) -> tuple[int, int]:
+    """Unpack an int of specified length from the buffer and advance the pointer.
+
+    Args:
+        buffer: The bytes buffer to read from.
+        ptr: Current position in the buffer.
+        length: Number of bytes to read.
+
+    Returns:
+        Tuple of (value, new_pointer).
+    """
     return (
         int.from_bytes(buffer[ptr : (ptr + length)], "little", signed=False),
         ptr + length,
     )
 
 
-def pack_int(value, length):
-    """Unpack an int for serialisation"""
+def pack_int(value: int, length: int) -> bytes:
+    """Pack an int for serialisation.
+
+    Args:
+        value: The integer value to pack.
+        length: Number of bytes to use.
+
+    Returns:
+        Bytes representation.
+    """
     return value.to_bytes(length, "little", signed=False)
 
 
-def unpack_bytes(buffer, ptr, length=None):
-    """Unpack a specified number of bytes from the buffer and advance the pointer"""
+def unpack_bytes(
+    buffer: bytes, ptr: int, length: int | None = None
+) -> tuple[bytes, int]:
+    """Unpack a specified number of bytes from the buffer and advance the pointer.
+
+    Args:
+        buffer: The bytes buffer to read from.
+        ptr: Current position in the buffer.
+        length: Number of bytes to read, or None to read length prefix.
+
+    Returns:
+        Tuple of (bytes, new_pointer).
+    """
     ptr_new = ptr
     if not length:
         length, ptr_new = unpack_int(buffer, ptr, 2)
     return (buffer[(ptr_new) : (ptr_new + length)], ptr_new + length)
 
 
-def unpack_string(buffer, ptr, length=None):
-    """Unpack a specified number of characters from the buffer and advance the pointer"""
+def unpack_string(
+    buffer: bytes, ptr: int, length: int | None = None
+) -> tuple[str, int]:
+    """Unpack a specified number of characters from the buffer and advance the pointer.
+
+    Args:
+        buffer: The bytes buffer to read from.
+        ptr: Current position in the buffer.
+        length: Number of bytes to read, or None to read length prefix.
+
+    Returns:
+        Tuple of (string, new_pointer).
+    """
     str_new, ptr_new = unpack_bytes(buffer, ptr, length=None)
     return (str_new.decode("utf-8", "ignore"), ptr_new)
 
 
-def unpack_roller_percent(buffer, ptr):
-    """Unpack roller close percentage."""
+def unpack_roller_percent(buffer: bytes, ptr: int) -> tuple[int, int]:
+    """Unpack roller close percentage.
+
+    Args:
+        buffer: The bytes buffer to read from.
+        ptr: Current position in the buffer.
+
+    Returns:
+        Tuple of (percent, new_pointer).
+    """
     ptr += 4
     roller_state, ptr = unpack_bytes(buffer, ptr, 1)
     ptr += 5  # unknown field
