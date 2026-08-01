@@ -2,13 +2,8 @@
 
 import asyncio
 import binascii
-import functools
 import logging
 import warnings
-from collections.abc import Callable
-from typing import (
-    Any,
-)
 
 import async_timeout
 
@@ -18,17 +13,19 @@ import aiopulse.const as const
 import aiopulse.errors as errors
 import aiopulse.transport
 import aiopulse.utils as utils
+from aiopulse.callbacks import CallbackMixin
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class Hub:
+class Hub(CallbackMixin):
     """Representation of an Acmeda Pulse Hub."""
 
     def __init__(
         self, host=None, loop: asyncio.events.AbstractEventLoop | None = None
     ):
         """Init the hub."""
+        super().__init__()
         if loop is not None:
             warnings.warn(
                 "loop parameter is deprecated and will be removed in v0.6.0",
@@ -61,7 +58,6 @@ class Hub:
         self.timers: dict[int, aiopulse.Timer] = {}
 
         self.handshake.clear()
-        self.update_callbacks: list[Callable] = []
 
     def __str__(self):
         """Returns string representation of the hub."""
@@ -72,46 +68,6 @@ class Hub:
             f"Firmware: {self.firmware_name} "
             f"WiFi: {self.wifi_module} "
         )
-
-    def callback_subscribe(self, callback):
-        """Add a callback for hub updates."""
-        self.update_callbacks.append(callback)
-
-    def callback_unsubscribe(self, callback):
-        """Remove a callback for hub updates."""
-        if callback in self.update_callbacks:
-            self.update_callbacks.remove(callback)
-
-    def async_add_job(
-        self, target: Callable[..., Any], *args: Any
-    ) -> asyncio.Future | None:
-        """Add a job from within the event loop.
-
-        This method must be run in the event loop.
-
-        target: target to call.
-        args: parameters for method to call.
-        """
-        task = None
-
-        # Check for partials to properly determine if coroutine function
-        check_target = target
-        while isinstance(check_target, functools.partial):
-            check_target = check_target.func
-
-        if asyncio.iscoroutine(check_target):
-            task = asyncio.create_task(target)  # type: ignore
-        elif asyncio.iscoroutinefunction(check_target):
-            task = asyncio.create_task(target(*args))
-        else:
-            task = self.loop.run_in_executor(None, target, *args)  # type: ignore
-
-        return task
-
-    def notify_callback(self, update_type=None):
-        """Tell callback that the hub has been updated."""
-        for callback in self.update_callbacks:
-            self.async_add_job(callback, update_type)
 
     @staticmethod
     async def discover(
@@ -754,7 +710,7 @@ class Hub:
                 _LOGGER.info(f"{self.host}: Connecting")
                 await self.connect()
                 # await self.update()
-                self.async_add_job(self.update)
+                self._schedule_callback(self.update)
                 await self.response_parser()
             except errors.CannotConnectException as inst:
                 _LOGGER.warning(f"{self.host}: Connect failed {inst}")

@@ -31,7 +31,7 @@ class TestHubInit:
         assert hub.rooms == {}
         assert hub.scenes == {}
         assert hub.timers == {}
-        assert hub.update_callbacks == []
+        assert hub._update_callbacks == []
 
     def test_init_without_host(self, event_loop):
         mock_transport = MagicMock(spec=aiopulse.transport.HubTransportTcp)
@@ -78,60 +78,19 @@ class TestHubCallbacks:
     def test_callback_subscribe(self, hub):
         callback = MagicMock()
         hub.callback_subscribe(callback)
-        assert callback in hub.update_callbacks
+        assert callback in hub._update_callbacks
 
     def test_callback_unsubscribe(self, hub):
         callback = MagicMock()
-        hub.update_callbacks.append(callback)
+        hub._update_callbacks.append(callback)
         hub.callback_unsubscribe(callback)
-        assert callback not in hub.update_callbacks
+        assert callback not in hub._update_callbacks
 
     def test_notify_callback(self, hub):
         callback = MagicMock()
-        hub.update_callbacks.append(callback)
+        hub._update_callbacks.append(callback)
         hub.notify_callback(const.UpdateType.info)
-        hub.async_add_job.assert_called_with(callback, const.UpdateType.info)
-
-
-class TestHubAsyncAddJob:
-    def test_async_add_job_coroutine(self, hub):
-        async def fake_coro():
-            pass
-
-        coro = fake_coro()
-        task = hub.async_add_job(coro)
-        assert task is not None
-        coro.close()
-
-    def test_async_add_job_coroutine_function(self, hub):
-        async def fake_func():
-            pass
-
-        task = hub.async_add_job(fake_func)
-        assert task is not None
-
-    def test_async_add_job_regular_function(self, hub):
-        def fake_func():
-            pass
-
-        task = hub.async_add_job(fake_func)
-        assert task is not None
-
-    def test_async_add_job_uses_asyncio_create_task(self, event_loop, mock_transport):
-        """async_add_job should use asyncio.create_task instead of loop.create_task."""
-        with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
-            with patch("asyncio.get_running_loop", return_value=event_loop):
-                h = Hub(host="192.168.1.100")
-
-        async def fake_coro():
-            pass
-
-        coro = fake_coro()
-        with patch("asyncio.create_task") as mock_create_task:
-            mock_create_task.return_value = MagicMock()
-            h.async_add_job(coro)
-            mock_create_task.assert_called_once_with(coro)
-            coro.close()
+        hub._schedule_callback.assert_called_with(callback, const.UpdateType.info)
 
 
 class TestHubConnect:

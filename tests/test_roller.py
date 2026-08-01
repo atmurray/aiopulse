@@ -11,7 +11,7 @@ class TestRoller:
     def hub_mock(self):
         hub = MagicMock()
         hub.host = "192.168.1.100"
-        hub.async_add_job = MagicMock(return_value=MagicMock())
+        hub._schedule_callback = MagicMock(return_value=MagicMock())
         return hub
 
     @pytest.fixture

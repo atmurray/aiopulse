@@ -29,7 +29,7 @@ def hub(event_loop, mock_transport):
     with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
         h = Hub(host="192.168.1.100", loop=event_loop)
         h.running = False
-        h.async_add_job = MagicMock(return_value=MagicMock())
+        h._schedule_callback = MagicMock(return_value=MagicMock())
         yield h
 
 

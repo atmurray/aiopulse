@@ -11,7 +11,7 @@ class TestRoom:
     def hub_mock(self):
         hub = MagicMock()
         hub.host = "192.168.1.100"
-        hub.async_add_job = MagicMock()
+        hub._schedule_callback = MagicMock()
         return hub
 
     @pytest.fixture

@@ -35,7 +35,7 @@ class Roller(HubEntity):
         self.flags: int = 0
 
         self.health_lock = asyncio.Lock()
-        self.health_task = hub.async_add_job(self.health_updater)
+        self.health_task = hub._schedule_callback(self.health_updater)
 
     def __del__(self) -> None:
         """Cancel health updater task on deletion."""
