@@ -11,6 +11,7 @@ from aiopulse.const import CommandType
 
 if TYPE_CHECKING:
     from aiopulse.hub import Hub
+    from aiopulse.room import Room
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class Roller(HubEntity):
         self.type: int | None = None
         self.serial: str | None = None
         self.room_id: bytes | None = None
-        self.room = None
+        self.room: 'Room | None' = None
         self.battery: int | None = None
         self.closed_percent: int | None = None
         self.flags: int = 0

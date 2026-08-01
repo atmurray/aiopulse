@@ -33,7 +33,7 @@ class CallbackMixin:
 
     def _schedule_callback(
         self, target: Callable[..., Any], *args: Any
-    ) -> asyncio.Task | None:
+    ) -> asyncio.Task[None] | None:
         """Schedule a callback to run asynchronously.
 
         Must be called from within the event loop.

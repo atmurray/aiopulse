@@ -4,6 +4,7 @@ import asyncio
 import binascii
 import logging
 import warnings
+from collections.abc import Callable
 
 import async_timeout
 
@@ -22,7 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 class Hub(CallbackMixin):
     """Representation of an Acmeda Pulse Hub."""
 
-    def __init__(self, host=None, loop: asyncio.events.AbstractEventLoop | None = None):
+    def __init__(self, host: str | None = None, loop: asyncio.events.AbstractEventLoop | None = None) -> None:
         """Init the hub."""
         super().__init__()
         if loop is not None:
@@ -34,31 +35,31 @@ class Hub(CallbackMixin):
             self.loop: asyncio.events.AbstractEventLoop = loop
         else:
             self.loop = asyncio.get_running_loop()
-        self.topic = str.encode("Smart_Id1_y:")
-        self.sequence = 4
-        self.handshake = asyncio.Event()
-        self.command_lock = asyncio.Lock()
-        self.health_lock = asyncio.Lock()
-        self.response_task = None
-        self.running = False
+        self.topic: bytes = str.encode("Smart_Id1_y:")
+        self.sequence: int = 4
+        self.handshake: asyncio.Event = asyncio.Event()
+        self.command_lock: asyncio.Lock = asyncio.Lock()
+        self.health_lock: asyncio.Lock = asyncio.Lock()
+        self.response_task: asyncio.Task[None] | None = None
+        self.running: bool = False
 
-        self.id = None
-        self.host = host
-        self.mac_address = None
-        self.ip_address = None
-        self.firmware_name = None
-        self.wifi_module = None
+        self.id: str | None = None
+        self.host: str | None = host
+        self.mac_address: str | None = None
+        self.ip_address: str | None = None
+        self.firmware_name: str | None = None
+        self.wifi_module: str | None = None
 
         self.protocol = aiopulse.transport.HubTransportTcp(host)
 
         self.rollers: dict[int, aiopulse.Roller] = {}
-        self.rooms: dict[int, aiopulse.Room] = {}
-        self.scenes: dict[int, aiopulse.Scene] = {}
-        self.timers: dict[int, aiopulse.Timer] = {}
+        self.rooms: dict[bytes, aiopulse.Room] = {}
+        self.scenes: dict[bytes, aiopulse.Scene] = {}
+        self.timers: dict[bytes, aiopulse.Timer] = {}
 
         self.handshake.clear()
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Returns string representation of the hub."""
         return (
             f"ID: {self.id} "
@@ -69,7 +70,7 @@ class Hub(CallbackMixin):
         )
 
     @staticmethod
-    async def discover(timeout=5, loop: asyncio.events.AbstractEventLoop | None = None, bind_address=None):
+    async def discover(timeout: int = 5, loop: asyncio.events.AbstractEventLoop | None = None, bind_address: str | None = None):  # type: ignore[misc, no-untyped-def]
         """Use a broadcast udp packet to find hubs on the lan.
 
         Args:
@@ -82,13 +83,13 @@ class Hub(CallbackMixin):
 
         await discover_client.connect(bind_address=bind_address)
 
-        hubs = {}
+        hubs: dict[tuple[str, int], Hub] = {}
 
         retries = 3
 
         try:
             async with async_timeout.timeout(timeout * retries):
-                for _ in range(1):
+                 for _ in range(1):
                     discover_client.send(
                         const.HEADER + CommandType.DISCOVER.to_bytes(4, "big")
                     )
@@ -99,7 +100,7 @@ class Hub(CallbackMixin):
                             async with async_timeout.timeout(timeout):
                                 (response, addr) = await discover_client.receive()
                                 _LOGGER.debug(
-                                    f"{addr[0]}: Received discover response: {response}"
+                                    f"{addr[0]}: Received discover response: {response.hex()}"
                                 )
                         except asyncio.TimeoutError:
                             pass
@@ -130,7 +131,7 @@ class Hub(CallbackMixin):
 
         await discover_client.close()
 
-    async def connect(self, host=None):
+    async def connect(self, host: str | None = None) -> bool:
         """Try and connect to the hub."""
         if host:
             self.host = host
@@ -138,7 +139,7 @@ class Hub(CallbackMixin):
         try:
             await self.protocol.connect(self.host)
         except OSError as inst:
-            raise errors.CannotConnectException(inst)
+            raise errors.CannotConnectException(str(inst))
 
         if self.handshake.is_set():
             _LOGGER.warning(f"{self.host} Handshake already completed")
@@ -196,14 +197,14 @@ class Hub(CallbackMixin):
 
         return True
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect from the hub."""
         _LOGGER.debug(f"{self.host}: Disconnecting")
         await self.protocol.close()
         self.handshake.clear()
         _LOGGER.info(f"{self.host}: Disconnected")
 
-    async def get_response(self, target_response=None):
+    async def get_response(self, target_response: bytes | None = None) -> bytes:
         """Get a response, throw exception if it doesn't match expected response."""
         response = await self.protocol.receive()
         if not target_response:
@@ -215,7 +216,7 @@ class Hub(CallbackMixin):
             raise errors.InvalidResponseException
         return response[length:]
 
-    def response_hubinfo(self, message):
+    def response_hubinfo(self, message: bytes) -> None:
         """Receive start of hub information."""
         if len(message) < 10:
             raise errors.InvalidResponseException(
@@ -234,7 +235,7 @@ class Hub(CallbackMixin):
         self.ip_address, ptr = utils.unpack_string(message, ptr)
         self.notify_callback(const.UpdateType.info)
 
-    def response_roller_updated(self, message):
+    def response_roller_updated(self, message: bytes) -> None:
         """Receive change of roller information."""
         if len(message) < 10:
             raise errors.InvalidResponseException(
@@ -273,10 +274,10 @@ class Hub(CallbackMixin):
         roller.notify_callback()
         self.notify_callback(const.UpdateType.rollers)
 
-    def response_discard(self, message):
+    def response_discard(self, message: bytes) -> None:
         """Discard response."""
 
-    def response_roomlist(self, message):
+    def response_roomlist(self, message: bytes) -> None:
         """Receive room list."""
         if len(message) < 12:
             raise errors.InvalidResponseException(
@@ -298,7 +299,7 @@ class Hub(CallbackMixin):
             self.rooms[room_id].name = room_name
         self.notify_callback(const.UpdateType.rooms)
 
-    def response_rollerlist(self, message):
+    def response_rollerlist(self, message: bytes) -> None:
         """Receive roller blind list."""
         if len(message) < 12:
             raise errors.InvalidResponseException(
@@ -323,7 +324,7 @@ class Hub(CallbackMixin):
             roller_percent, ptr = utils.unpack_roller_percent(message, ptr)
             roller_flags, ptr = utils.unpack_int(message, ptr, 1)
 
-            _LOGGER.debug(f"{binascii.hexlify(message[start:ptr])}")
+            _LOGGER.debug(f"{message[start:ptr].hex()}")
             if roller_id not in self.rollers:
                 self.rollers[roller_id] = aiopulse.Roller(self, roller_id)
             roller = self.rollers[roller_id]
@@ -342,7 +343,7 @@ class Hub(CallbackMixin):
 
         self.notify_callback(const.UpdateType.rollers)
 
-    def response_scenelist(self, message):
+    def response_scenelist(self, message: bytes) -> None:
         """Receive scene list."""
         if len(message) < 12:
             raise errors.InvalidResponseException(
@@ -372,7 +373,7 @@ class Hub(CallbackMixin):
         _, ptr = utils.unpack_bytes(message, ptr, 2)
         self.notify_callback(const.UpdateType.scenes)
 
-    def response_timerlist(self, message):
+    def response_timerlist(self, message: bytes) -> None:
         """Receive timer list."""
         if len(message) < 12:
             raise errors.InvalidResponseException(
@@ -401,7 +402,7 @@ class Hub(CallbackMixin):
             _, ptr = utils.unpack_bytes(message, ptr, 2)  # '\x02\x01'
             timer_type, ptr = utils.unpack_bytes(message, ptr, 4)
 
-            entity = None
+            entity: aiopulse.Roller | aiopulse.Scene | None = None
             if timer_type == b"\x00\x01\x03\x01":  # Device Timer
                 _, ptr = utils.unpack_bytes(message, ptr, 8)
                 percent, ptr = utils.unpack_int(message, ptr, 1)
@@ -416,7 +417,7 @@ class Hub(CallbackMixin):
             else:
                 _LOGGER.error(
                     f"{self.host}: Unexpected timer type received: "
-                    f"{binascii.hexlify(timer_type)}"
+                    f"{timer_type.hex()}"
                 )
                 return
 
@@ -432,7 +433,7 @@ class Hub(CallbackMixin):
         _, ptr = utils.unpack_bytes(message, ptr, 2)
         self.notify_callback(const.UpdateType.timers)
 
-    def response_authinfo(self, message):
+    def response_authinfo(self, message: bytes) -> None:
         """Receive acmeda account information."""
         if len(message) < 15:
             raise errors.InvalidResponseException(
@@ -442,7 +443,7 @@ class Hub(CallbackMixin):
         ptr = 15
         _, ptr = utils.unpack_string(message, ptr)
 
-    def response_position(self, message):
+    def response_position(self, message: bytes) -> None:
         """Receive change of roller position information."""
         if len(message) < 12:
             raise errors.InvalidResponseException(
@@ -459,7 +460,7 @@ class Hub(CallbackMixin):
             self.rollers[roller_id].notify_callback()
             _LOGGER.info(self.rollers[roller_id])
 
-    def response_rollerhealth(self, message):
+    def response_rollerhealth(self, message: bytes) -> None:
         """Receive change of roller health information."""
         if len(message) < 12:
             raise errors.InvalidResponseException(
@@ -470,27 +471,27 @@ class Hub(CallbackMixin):
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         # letter A and then 4 bytes
         unknown, ptr = utils.unpack_bytes(message, ptr, 5)
-        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        _LOGGER.debug(f"{unknown.hex()}")
         # letter B and then 4 bytes
         unknown, ptr = utils.unpack_bytes(message, ptr, 5)
-        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        _LOGGER.debug(f"{unknown.hex()}")
         # letter C and then 4 bytes
         unknown, ptr = utils.unpack_bytes(message, ptr, 5)
-        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        _LOGGER.debug(f"{unknown.hex()}")
         # unknown
         unknown, ptr = utils.unpack_bytes(message, ptr, 3)
-        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        _LOGGER.debug(f"{unknown.hex()}")
         # battery level
-        charge, ptr = utils.unpack_int(message, ptr, 1)
+        charge_int, ptr = utils.unpack_int(message, ptr, 1)
         charge_fraction, ptr = utils.unpack_int(message, ptr, 1)
-        charge += charge_fraction / 256.0
+        charge: float = charge_int + charge_fraction / 256.0
         roller_battery = round(
             min(100, max(0, 100.0 * (charge - 9.45) / (12.375 - 9.45)))
         )
         _LOGGER.debug(f"Battery: {charge} {roller_battery}")
         # unknown
         unknown, ptr = utils.unpack_bytes(message, ptr, 8)
-        _LOGGER.debug(f"{binascii.hexlify(unknown)}")
+        _LOGGER.debug(f"{unknown.hex()}")
         ptr += 2  # checksum
         if roller_id in self.rollers:
             self.rollers[roller_id].battery = roller_battery
@@ -499,7 +500,7 @@ class Hub(CallbackMixin):
         if self.health_lock.locked():
             self.health_lock.release()
 
-    def response_discover(self, message):
+    def response_discover(self, message: bytes) -> None:
         """Receive after discover broadcast packet."""
         if len(message) < 10:
             raise errors.InvalidResponseException(
@@ -514,12 +515,12 @@ class Hub(CallbackMixin):
     class Receiver:
         """Wraps around a function that gets called for received messages."""
 
-        def __init__(self, name, function):
+        def __init__(self, name: str, function: 'Callable[[Hub, bytes], None]') -> None:
             """Constructor for message receiver class."""
             self.name = name
             self.function = function
 
-        def execute(self, target, message):
+        def execute(self, target: 'Hub', message: bytes) -> None:
             """Executor function."""
             self.function(target, message)
 
@@ -541,11 +542,11 @@ class Hub(CallbackMixin):
         bytes.fromhex("0f00"): Receiver("discover response", response_discover),
     }
 
-    def rec_ping(self, message):
+    def rec_ping(self, message: bytes) -> None:
         """Receive a ping from the hub."""
         _LOGGER.debug(f"{self.host}: Received hub ping response")
 
-    def rec_message(self, message):
+    def rec_message(self, message: bytes) -> None:
         """Receive and decode a message from the hub."""
         if message:
             if message[0] != 6:
@@ -555,8 +556,8 @@ class Hub(CallbackMixin):
             if message[1 : (1 + len(self.topic))] != self.topic:
                 _LOGGER.error(
                     f"{self.host}: Received invalid topic: "
-                    f"{message[1 : (1 + len(self.topic))]}, "
-                    f"expected: {self.topic}"
+                    f"{message[1 : (1 + len(self.topic))].hex()}, "
+                    f"expected: {self.topic.hex()}"
                 )
                 raise errors.InvalidResponseException
 
@@ -569,9 +570,7 @@ class Hub(CallbackMixin):
                 self.msgmap[mtype].execute(self, message[ptr:])
             else:
                 _LOGGER.warning(
-                    f"{self.host}: Unable to parse message %s message %s",
-                    binascii.hexlify(mtype),
-                    binascii.hexlify(message),
+                    f"{self.host}: Unable to parse message {mtype.hex()} message {message.hex()}"
                 )
         else:
             """message is the acknowledgement of a command"""
@@ -583,14 +582,14 @@ class Hub(CallbackMixin):
         145: Receiver("message", rec_message),
     }
 
-    def response_parse(self, response):
+    def response_parse(self, response: bytes) -> None:
         """Decode response."""
         while response:
             ptr = 0
             header, ptr = utils.unpack_bytes(response, ptr, 4)
             if header != bytes.fromhex("00000003"):
                 _LOGGER.warning(
-                    f"{self.host}: Unknown response: {binascii.hexlify(response[0:4])}"
+                    f"{self.host}: Unknown response: {response[0:4].hex()}"
                 )
                 raise errors.InvalidResponseException
 
@@ -615,25 +614,25 @@ class Hub(CallbackMixin):
                 if mtype in Hub.respmap:
                     _LOGGER.debug(
                         f"{self.host}: Received response: {mtype} "
-                        f"{Hub.respmap[mtype].name} content: {message}"
+                        f"{Hub.respmap[mtype].name} content: {message.hex()}"
                     )
                     Hub.respmap[mtype].execute(self, message)
                 else:
                     _LOGGER.warning(
                         f"{self.host}: Received unknown response type: "
                         f"{mtype}, "
-                        f"trying to decode anyway. Message: {binascii.hexlify(message)}"
+                        f"trying to decode anyway. Message: {message.hex()}"
                     )
                     self.rec_message(message)
 
             except Exception:
                 logging.exception(
                     f"{self.host}: Exception raised when parsing response: "
-                    f"{binascii.hexlify(response)}"
+                    f"{response.hex()}"
                 )
                 raise errors.InvalidResponseException
 
-    async def response_parser(self):
+    async def response_parser(self) -> None:
         """Receive a response from the hub and work out what message it is."""
         _LOGGER.debug(f"{self.host}: Starting response parser")
         while self.handshake.is_set():
@@ -650,7 +649,7 @@ class Hub(CallbackMixin):
                 _LOGGER.debug(f"{self.host}: Invalid response, sending ping keepalive")
                 self.protocol.send(const.HEADER + CommandType.PING.to_bytes(4, "big"))
 
-    async def update(self):
+    async def update(self) -> None:
         """Update all hub information (includes scenes, rooms, and rollers)."""
         await self.send_command(
             CommandType.GET_HUB_INFO.to_bytes(4, "big"),
@@ -660,8 +659,8 @@ class Hub(CallbackMixin):
         _LOGGER.debug(f"{self.host}: Hub update command sent")
 
     async def send_command(
-        self, command, message_type, message, timeout=3.0, retries=3
-    ):
+        self, command: bytes, message_type: bytes, message: bytes, timeout: float = 3.0, retries: int = 3
+    ) -> None:
         """Send payload to the hub."""
         if not self.running:
             raise errors.NotRunningException
@@ -672,7 +671,7 @@ class Hub(CallbackMixin):
         command_header = const.HEADER + command + bytes.fromhex("05") + self.topic
         length = len(data) + 1  # bytes.fromhex('0C00')
         buffer = command_header + utils.pack_int(length, 2) + data + checksum
-        _LOGGER.debug(f"Sending buffer {binascii.hexlify(buffer)}")
+        _LOGGER.debug(f"Sending buffer {buffer.hex()}")
 
         await self.command_lock.acquire()
 
@@ -691,7 +690,7 @@ class Hub(CallbackMixin):
         if self.command_lock.locked():
             self.command_lock.release()
 
-    async def send_healthcheck(self, command, message_type, message):
+    async def send_healthcheck(self, command: bytes, message_type: bytes, message: bytes) -> None:
         """Send payload to the hub."""
         await self.health_lock.acquire()
 
@@ -706,7 +705,7 @@ class Hub(CallbackMixin):
         if self.health_lock.locked():
             self.health_lock.release()
 
-    async def run(self):
+    async def run(self) -> None:
         """Start hub by connecting then awaiting for messages.
 
         Runs until the stop() method is called.
@@ -742,7 +741,7 @@ class Hub(CallbackMixin):
                     await asyncio.sleep(5)
         _LOGGER.debug(f"{self.host}: Stopped")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Tell hub to stop and await for it to disconnect."""
         if not self.running:
             _LOGGER.warning(f"{self.host}: Already stopped")

@@ -13,14 +13,14 @@ _LOGGER = logging.getLogger(__name__)
 class HubTransportBase(asyncio.Protocol):
     """Base class for Hub transport implementations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Constructor for the base transport class."""
-        self.transport: asyncio.Transport | None = None
+        self.transport: asyncio.BaseTransport | None = None
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Called when a connection is made."""
         _LOGGER.debug("Connection established")
-        self.transport = transport  # type: ignore[assignment]
+        self.transport = transport
 
     def error_received(self, exc: Exception) -> None:
         """Called when an error is received."""
@@ -34,45 +34,46 @@ class HubTransportBase(asyncio.Protocol):
 class HubTransportUdp(HubTransportBase):
     """UDP Based Hub transport."""
 
-    def __init__(self, host=None, port=12414):
+    def __init__(self, host: str | None = None, port: int = 12414) -> None:
         """Constructor for UDP transport class."""
         self.host = host
         self.port = port
-        self.transport = None
-        self.protocol = None
-        self.is_udp = True
-        self.receive_queue = asyncio.Queue()
+        self.transport: asyncio.DatagramTransport | None = None  # type: ignore[assignment]
+        self.protocol: asyncio.DatagramProtocol | None = None
+        self.is_udp: bool = True
+        self.receive_queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = asyncio.Queue()
         super().__init__()
 
-    async def connect(self, host=None):
+    async def connect(self, host: str | None = None) -> None:
         """Initialise connection."""
         if host:
             self.host = host
 
         loop = asyncio.get_running_loop()
-        self.transport, self.protocol = await loop.create_datagram_endpoint(
+        self.transport, self.protocol = await loop.create_datagram_endpoint(  # type: ignore[assignment]
             lambda: self,
-            remote_addr=(self.host, self.port),
+            remote_addr=(self.host or "", self.port),
         )
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the connection."""
-        self.transport.close()
+        if self.transport:
+            self.transport.close()
         _LOGGER.debug("UDP connection closed")
 
-    def send(self, buffer):
+    def send(self, buffer: bytes) -> None:
         """Abstraction of the underlying transport to send a buffer."""
         if not self.transport:
             raise NotConnectedException("UDP transport not connected")
-        self.transport.sendto(buffer, (self.host, self.port))
+        self.transport.sendto(buffer, (self.host or "", self.port))
 
-    async def receive(self):
+    async def receive(self) -> tuple[bytes, tuple[str, int]]:
         """Abstraction of the underlying transport to receive."""
         if not self.transport:
             raise NotConnectedException("UDP transport not connected")
         return await self.receive_queue.get()
 
-    def datagram_received(self, data, addr):
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
         """Callback for a received datagram, enqueue it."""
         # Don't close the socket as we might get multiple responses.
         _LOGGER.debug("UDP datagram received")
@@ -82,7 +83,7 @@ class HubTransportUdp(HubTransportBase):
 class HubTransportUdpBroadcast(HubTransportUdp):
     """UDP Based Hub transport."""
 
-    async def connect(self, host="255.255.255.255", bind_address=None):
+    async def connect(self, host: str = "255.255.255.255", bind_address: str | None = None) -> None:  # type: ignore[override]
         """Init connection.
 
         Args:
@@ -106,12 +107,12 @@ class HubTransportUdpBroadcast(HubTransportUdp):
         sock.sendto(b"0", ("<broadcast>", 1500))
 
         loop = asyncio.get_running_loop()
-        self.transport, self.protocol = await loop.create_datagram_endpoint(
+        self.transport, self.protocol = await loop.create_datagram_endpoint(  # type: ignore[assignment]
             lambda: self,
             sock=sock,
         )
 
-    def send(self, buffer):
+    def send(self, buffer: bytes) -> None:
         """Send buffer - on all interfaces for broadcast, or main socket otherwise."""
         if not self.transport:
             raise NotConnectedException("UDP transport not connected")
@@ -120,12 +121,12 @@ class HubTransportUdpBroadcast(HubTransportUdp):
         if self.host == "255.255.255.255":
             self._send_to_all_interfaces(buffer)
         else:
-            self.transport.sendto(buffer, (self.host, self.port))
+            self.transport.sendto(buffer, (self.host or "", self.port))
 
-    def _send_to_all_interfaces(self, buffer):
+    def _send_to_all_interfaces(self, buffer: bytes) -> None:
         """Send buffer on all available network interfaces."""
         try:
-            interfaces = []
+            interfaces: list[str] = []
             for name, addrs in psutil.net_if_addrs().items():
                 for addr in addrs:
                     if addr.family == socket.AF_INET:
@@ -134,7 +135,11 @@ class HubTransportUdpBroadcast(HubTransportUdp):
             _LOGGER.debug(f"Sending on {len(interfaces)} interfaces: {interfaces}")
 
             # Get the main socket's port
-            main_port = self.transport.get_extra_info("sockname")[1]
+            if self.transport:
+                sockname = self.transport.get_extra_info("sockname")
+                main_port = sockname[1] if sockname else 0
+            else:
+                main_port = 0
 
             for ip in interfaces:
                 if not ip.startswith("127.") and not ip.startswith("169.254."):
@@ -143,7 +148,7 @@ class HubTransportUdpBroadcast(HubTransportUdp):
                         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
                         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         sock.bind((ip, main_port))
-                        sock.sendto(buffer, (self.host, self.port))
+                        sock.sendto(buffer, (self.host or "", self.port))
                         sock.close()
                         _LOGGER.debug(f"Sent {len(buffer)} bytes on interface {ip}")
                     except Exception as e:
@@ -155,20 +160,20 @@ class HubTransportUdpBroadcast(HubTransportUdp):
 class HubTransportTcp(HubTransportBase):
     """TCP based Hub transport."""
 
-    def __init__(self, host=None):
+    def __init__(self, host: str | None = None) -> None:
         """TCP Transport constructor."""
         self.host = host
-        self.port = 12416
+        self.port: int = 12416
 
-        self.reader = None
-        self.writer = None
-        self.transport = None
-        self.protocol = None
-        self.is_udp = False
-        self.connect_task = None
+        self.reader: asyncio.StreamReader | None = None
+        self.writer: asyncio.StreamWriter | None = None
+        self.transport: asyncio.Transport | None = None
+        self.protocol: asyncio.StreamReaderProtocol | None = None
+        self.is_udp: bool = False
+        self.connect_task: asyncio.Task[None] | None = None
         super().__init__()
 
-    async def do_connection(self):
+    async def do_connection(self) -> None:
         """Try and establish a TCP connection."""
         loop = asyncio.get_running_loop()
         self.reader = asyncio.StreamReader()
@@ -176,13 +181,13 @@ class HubTransportTcp(HubTransportBase):
 
         # The following blocks until a connection is made
         self.transport, _ = await loop.create_connection(
-            lambda: self, self.host, self.port
+            lambda: self, self.host or "", self.port
         )
         self.writer = asyncio.StreamWriter(
             self.transport, self.protocol, self.reader, loop
         )
 
-    async def connect(self, host=None):
+    async def connect(self, host: str | None = None) -> None:
         """Init connection."""
         if host:
             self.host = host
@@ -198,7 +203,7 @@ class HubTransportTcp(HubTransportBase):
 
         await self.connect_task
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the connection."""
         try:
             if self.writer:
@@ -221,28 +226,31 @@ class HubTransportTcp(HubTransportBase):
         except Exception as inst:
             _LOGGER.warning(f"{self.host}: Error closing TCP socket cleanly: {inst}")
 
-    def send(self, buffer):
+    def send(self, buffer: bytes) -> None:
         """Abstraction of the underlying transport to send a buffer."""
         if not self.writer or self.writer.is_closing():
             raise NotConnectedException("TCP transport not connected")
         self.writer.write(buffer)
 
-    async def receive(self):
+    async def receive(self) -> bytes:
         """Receive from stream."""
         if not self.reader or not self.writer or self.writer.is_closing():
             raise NotConnectedException("TCP transport not connected")
         return await self.reader.read(65535)
 
-    def data_received(self, data):
+    def data_received(self, data: bytes) -> None:
         """Callback when data has been received."""
-        self.protocol.data_received(data)
+        if self.protocol:
+            self.protocol.data_received(data)
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Callback when a connection has been made."""
-        self.protocol.connection_made(transport)
+        if self.protocol:
+            self.protocol.connection_made(transport)
         super().connection_made(transport)
 
-    def connection_lost(self, exc):
+    def connection_lost(self, exc: Exception | None) -> None:
         """Callback when a connection is lost."""
-        self.protocol.connection_lost(exc)
+        if self.protocol:
+            self.protocol.connection_lost(exc)
         super().connection_lost(exc)
