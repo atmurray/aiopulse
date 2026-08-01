@@ -107,6 +107,7 @@ class Hub(CallbackMixin):
 
                         if addr and addr not in hubs:
                             _LOGGER.info(f"{addr[0]}: Discovered hub on port {addr[1]}")
+                            hub: Hub | None = None
                             try:
                                 hub = Hub(addr[0], loop)
                                 discover_client.send(
@@ -119,11 +120,11 @@ class Hub(CallbackMixin):
                                 yield hub
                             except errors.CannotConnectException:
                                 _LOGGER.warning(
-                                    f"{hub.host}: Couldn't connect to discovered hub"
+                                    f"{addr[0]}: Couldn't connect to discovered hub"
                                 )
                             except errors.InvalidResponseException:
                                 _LOGGER.warning(
-                                    f"{hub.host}: Couldn't interrogate discovered hub"
+                                    f"{addr[0]}: Couldn't interrogate discovered hub"
                                 )
         except asyncio.TimeoutError:
             pass
