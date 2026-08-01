@@ -48,7 +48,7 @@ class TestHubTransportUdp:
 
     @pytest.mark.asyncio
     async def test_connect(self, udp):
-        with patch.object(asyncio, "get_event_loop") as mock_get_loop:
+        with patch.object(asyncio, "get_running_loop") as mock_get_loop:
             mock_loop = MagicMock()
             mock_get_loop.return_value = mock_loop
             mock_loop.create_datagram_endpoint = AsyncMock(
@@ -70,6 +70,11 @@ class TestHubTransportUdp:
         udp.send(b"test")
         udp.transport.sendto.assert_called_once_with(b"test", ("192.168.1.100", 12414))
 
+    def test_send_not_connected(self, udp):
+        udp.transport = None
+        with pytest.raises(NotConnectedException):
+            udp.send(b"test")
+
     def test_send_uses_host_port(self, udp):
         udp.transport = MagicMock()
         udp.host = "10.0.0.5"
@@ -79,6 +84,7 @@ class TestHubTransportUdp:
 
     @pytest.mark.asyncio
     async def test_receive(self, udp):
+        udp.transport = MagicMock()
         expected = (b"response", ("192.168.1.100", 12414))
         udp.receive_queue.put_nowait(expected)
         result = await udp.receive()
@@ -89,12 +95,18 @@ class TestHubTransportUdp:
         result = udp.receive_queue.get_nowait()
         assert result == (b"data", ("1.2.3.4", 5678))
 
+    @pytest.mark.asyncio
+    async def test_receive_not_connected(self, udp):
+        udp.transport = None
+        with pytest.raises(NotConnectedException):
+            await udp.receive()
+
 
 class TestHubTransportUdpBroadcast:
     @pytest.mark.asyncio
     async def test_connect(self):
         transport = HubTransportUdpBroadcast()
-        with patch.object(asyncio, "get_event_loop") as mock_get_loop, \
+        with patch.object(asyncio, "get_running_loop") as mock_get_loop, \
              patch("socket.socket") as mock_socket:
             mock_loop = MagicMock()
             mock_get_loop.return_value = mock_loop
@@ -125,7 +137,7 @@ class TestHubTransportTcp:
 
     @pytest.mark.asyncio
     async def test_do_connection(self, tcp):
-        with patch.object(asyncio, "get_event_loop") as mock_get_loop:
+        with patch.object(asyncio, "get_running_loop") as mock_get_loop:
             mock_loop = MagicMock()
             mock_get_loop.return_value = mock_loop
             mock_loop.create_connection = AsyncMock(
@@ -208,6 +220,13 @@ class TestHubTransportTcp:
         mock_writer.is_closing.return_value = True
         tcp.writer = mock_writer
 
+        with pytest.raises(NotConnectedException):
+            await tcp.receive()
+
+    @pytest.mark.asyncio
+    async def test_receive_not_connected(self, tcp):
+        tcp.writer = None
+        tcp.reader = None
         with pytest.raises(NotConnectedException):
             await tcp.receive()
 

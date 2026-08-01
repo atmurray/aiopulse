@@ -48,7 +48,7 @@ class HubTransportUdp(HubTransportBase):
         if host:
             self.host = host
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         self.transport, self.protocol = await loop.create_datagram_endpoint(
             lambda: self,
             remote_addr=(self.host, self.port),
@@ -61,10 +61,14 @@ class HubTransportUdp(HubTransportBase):
 
     def send(self, buffer):
         """Abstraction of the underlying transport to send a buffer."""
+        if not self.transport:
+            raise NotConnectedException("UDP transport not connected")
         self.transport.sendto(buffer, (self.host, self.port))
 
     async def receive(self):
         """Abstraction of the underlying transport to receive."""
+        if not self.transport:
+            raise NotConnectedException("UDP transport not connected")
         return await self.receive_queue.get()
 
     def datagram_received(self, data, addr):
@@ -87,7 +91,7 @@ class HubTransportUdpBroadcast(HubTransportUdp):
 
         sock.sendto(b"0", ("<broadcast>", 1500))
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         self.transport, self.protocol = await loop.create_datagram_endpoint(
             lambda: self,
             sock=sock,
@@ -112,9 +116,9 @@ class HubTransportTcp(HubTransportBase):
 
     async def do_connection(self):
         """Try and establish a TCP connection."""
-        loop = asyncio.get_event_loop()
-        self.reader = asyncio.StreamReader(loop=loop)
-        self.protocol = asyncio.StreamReaderProtocol(self.reader, loop=loop)
+        loop = asyncio.get_running_loop()
+        self.reader = asyncio.StreamReader()
+        self.protocol = asyncio.StreamReaderProtocol(self.reader)
 
         # The following blocks until a connection is made
         self.transport, _ = await loop.create_connection(
@@ -166,13 +170,13 @@ class HubTransportTcp(HubTransportBase):
     def send(self, buffer):
         """Abstraction of the underlying transport to send a buffer."""
         if not self.writer or self.writer.is_closing():
-            raise NotConnectedException
+            raise NotConnectedException("TCP transport not connected")
         self.writer.write(buffer)
 
     async def receive(self):
         """Receive from stream."""
-        if self.writer.is_closing():
-            raise NotConnectedException
+        if not self.reader or not self.writer or self.writer.is_closing():
+            raise NotConnectedException("TCP transport not connected")
         return await self.reader.read(65535)
 
     def data_received(self, data):
