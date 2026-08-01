@@ -81,14 +81,26 @@ class HubTransportUdp(HubTransportBase):
 class HubTransportUdpBroadcast(HubTransportUdp):
     """UDP Based Hub transport."""
 
-    async def connect(self, host="255.255.255.255"):
-        """Init connection."""
+    async def connect(self, host="255.255.255.255", bind_address=None):
+        """Init connection.
+
+        Args:
+            host: Broadcast address (default 255.255.255.255).
+            bind_address: Local interface to bind to (e.g., '10.0.0.24').
+                         If None, binds to all interfaces (0.0.0.0).
+        """
         if host:
             self.host = host
         addrinfo = socket.getaddrinfo(self.host, None)[0]
         sock = socket.socket(addrinfo[0], socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
+        # Bind to specific interface if provided
+        if bind_address:
+            sock.bind((bind_address, 0))
+            _LOGGER.debug(f"Socket bound to interface: {bind_address}")
+
+        # Send a test broadcast to port 1500 (Windows discovery fix)
         sock.sendto(b"0", ("<broadcast>", 1500))
 
         loop = asyncio.get_running_loop()

@@ -69,11 +69,18 @@ class Hub(CallbackMixin):
         )
 
     @staticmethod
-    async def discover(timeout=5, loop: asyncio.events.AbstractEventLoop | None = None):
-        """Use a broadcast udp packet to find hubs on the lan."""
+    async def discover(timeout=5, loop: asyncio.events.AbstractEventLoop | None = None, bind_address=None):
+        """Use a broadcast udp packet to find hubs on the lan.
+
+        Args:
+            timeout: Timeout for each discovery attempt in seconds.
+            loop: Deprecated. The event loop to use.
+            bind_address: Local interface to bind to (e.g., '10.0.0.24').
+                         If None, binds to all interfaces.
+        """
         discover_client = aiopulse.transport.HubTransportUdpBroadcast()
 
-        await discover_client.connect()
+        await discover_client.connect(bind_address=bind_address)
 
         hubs = {}
 
