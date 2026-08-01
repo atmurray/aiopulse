@@ -26,6 +26,7 @@ class Roller(HubEntity):
             roller_id: The unique roller identifier.
         """
         super().__init__(hub, roller_id)
+        self.id: int  # Override type from HubEntity
         self.type: int | None = None
         self.serial: str | None = None
         self.room_id: bytes | None = None
@@ -96,7 +97,7 @@ class Roller(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("190401030001")
             + utils.pack_int(percent, 2)
@@ -111,7 +112,7 @@ class Roller(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("10")
             + bytes.fromhex("ff")
@@ -125,7 +126,7 @@ class Roller(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("11")
             + bytes.fromhex("ff")
@@ -139,7 +140,7 @@ class Roller(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("12")
             + bytes.fromhex("ff")
@@ -153,7 +154,7 @@ class Roller(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("410201000E4202010004")
             + bytes.fromhex("ff")
         )

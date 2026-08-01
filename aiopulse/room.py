@@ -25,9 +25,8 @@ class Room(HubEntity):
 
     def __str__(self) -> str:
         """Returns string representation of room."""
-        return "Name: {} ID: {} Icon: {}".format(
-            self.name, self.id[0:4] if isinstance(self.id, bytes) else self.id, self.icon
-        )
+        id_str = self.id[0:4].hex() if isinstance(self.id, bytes) else str(self.id)
+        return f"Name: {self.name} ID: {id_str} Icon: {self.icon}"
 
     async def move_to(self, percent: int) -> None:
         """Send command to move the room to a percentage closed.
@@ -38,7 +37,7 @@ class Room(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("190401030001")
             + utils.pack_int(percent, 2)
@@ -53,7 +52,7 @@ class Room(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("10")
             + bytes.fromhex("ff")
@@ -67,7 +66,7 @@ class Room(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("11")
             + bytes.fromhex("ff")
@@ -81,7 +80,7 @@ class Room(HubEntity):
         message = (
             bytes.fromhex("0000000000000101")
             + bytes.fromhex("0600")
-            + utils.pack_int(self.id, 6)
+            + utils.pack_int(int(self.id), 6)
             + bytes.fromhex("03010100")
             + bytes.fromhex("12")
             + bytes.fromhex("ff")

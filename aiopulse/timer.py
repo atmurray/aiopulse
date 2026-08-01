@@ -28,12 +28,15 @@ class Timer(HubEntity):
 
     def __str__(self) -> str:
         """Returns string representation of timer."""
+        id_str = self.id[0:4].hex() if isinstance(self.id, bytes) else str(self.id)
+        days_str = f"{self.days:>07b}" if self.days is not None else "None"
+        entity_str = self.entity.name if self.entity else "None"
         return (
             f"Name: {self.name} "
-            f"ID: {self.id[0:4] if isinstance(self.id, bytes) else self.id} "
+            f"ID: {id_str} "
             f"Icon: {self.icon} "
             f"State: {self.state} "
             f"Time: {self.hour}:{self.minute} "
-            f"Days: {self.days:>07b} " if self.days is not None else "Days: None "
-            f'Entity: {self.entity.name if self.entity else "None"}'
+            f"Days: {days_str} "
+            f"Entity: {entity_str}"
         )

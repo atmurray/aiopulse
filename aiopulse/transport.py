@@ -15,18 +15,18 @@ class HubTransportBase(asyncio.Protocol):
 
     def __init__(self):
         """Constructor for the base transport class."""
-        self.transport = None
+        self.transport: asyncio.Transport | None = None
 
-    def connection_made(self, transport: asyncio.Transport):
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Called when a connection is made."""
         _LOGGER.debug("Connection established")
-        self.transport = transport
+        self.transport = transport  # type: ignore[assignment]
 
-    def error_received(self, exc):
+    def error_received(self, exc: Exception) -> None:
         """Called when an error is received."""
         _LOGGER.error("Error received: %s", exc)
 
-    def connection_lost(self, exc):
+    def connection_lost(self, exc: Exception | None) -> None:
         """Called when a connection is lost."""
         _LOGGER.debug("Socket closed")
 

@@ -23,6 +23,5 @@ class Scene(HubEntity):
 
     def __str__(self) -> str:
         """Returns string representation of scene."""
-        return "Name: {} ID: {} Icon: {}".format(
-            self.name, self.id[0:4] if isinstance(self.id, bytes) else self.id, self.icon
-        )
+        id_str = self.id[0:4].hex() if isinstance(self.id, bytes) else str(self.id)
+        return f"Name: {self.name} ID: {id_str} Icon: {self.icon}"
