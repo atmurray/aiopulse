@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch, call
 
 import pytest
@@ -50,6 +51,29 @@ class TestHubInit:
         assert "v1.0" in result
 
 
+class TestHubDeprecation:
+    def test_loop_parameter_deprecation(self, event_loop, mock_transport):
+        """Passing loop parameter should emit DeprecationWarning."""
+        with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                Hub(host="192.168.1.100", loop=event_loop)
+                assert len(w) == 1
+                assert issubclass(w[0].category, DeprecationWarning)
+                assert "loop parameter is deprecated" in str(w[0].message)
+
+    def test_no_loop_no_warning(self, mock_transport):
+        """When loop is None and get_running_loop succeeds, no deprecation warning."""
+        with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
+            with patch("asyncio.get_running_loop") as mock_get_loop:
+                mock_get_loop.return_value = MagicMock()
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    Hub(host="192.168.1.100")
+                    assert len(w) == 0
+                    mock_get_loop.assert_called_once()
+
+
 class TestHubCallbacks:
     def test_callback_subscribe(self, hub):
         callback = MagicMock()
@@ -92,6 +116,22 @@ class TestHubAsyncAddJob:
 
         task = hub.async_add_job(fake_func)
         assert task is not None
+
+    def test_async_add_job_uses_asyncio_create_task(self, event_loop, mock_transport):
+        """async_add_job should use asyncio.create_task instead of loop.create_task."""
+        with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
+            with patch("asyncio.get_running_loop", return_value=event_loop):
+                h = Hub(host="192.168.1.100")
+
+        async def fake_coro():
+            pass
+
+        coro = fake_coro()
+        with patch("asyncio.create_task") as mock_create_task:
+            mock_create_task.return_value = MagicMock()
+            h.async_add_job(coro)
+            mock_create_task.assert_called_once_with(coro)
+            coro.close()
 
 
 class TestHubConnect:
@@ -404,6 +444,68 @@ class TestHubResponseHandlers:
         assert roller_mock.battery == 19
 
 
+class TestHubBoundsChecking:
+    def test_response_hubinfo_too_short(self, hub):
+        """response_hubinfo should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 9  # less than 10 bytes
+        with pytest.raises(InvalidResponseException):
+            hub.response_hubinfo(short_message)
+
+    def test_response_roller_updated_too_short(self, hub):
+        """response_roller_updated should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 9
+        with pytest.raises(InvalidResponseException):
+            hub.response_roller_updated(short_message)
+
+    def test_response_roomlist_too_short(self, hub):
+        """response_roomlist should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 11
+        with pytest.raises(InvalidResponseException):
+            hub.response_roomlist(short_message)
+
+    def test_response_rollerlist_too_short(self, hub):
+        """response_rollerlist should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 11
+        with pytest.raises(InvalidResponseException):
+            hub.response_rollerlist(short_message)
+
+    def test_response_scenelist_too_short(self, hub):
+        """response_scenelist should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 11
+        with pytest.raises(InvalidResponseException):
+            hub.response_scenelist(short_message)
+
+    def test_response_timerlist_too_short(self, hub):
+        """response_timerlist should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 11
+        with pytest.raises(InvalidResponseException):
+            hub.response_timerlist(short_message)
+
+    def test_response_authinfo_too_short(self, hub):
+        """response_authinfo should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 14
+        with pytest.raises(InvalidResponseException):
+            hub.response_authinfo(short_message)
+
+    def test_response_position_too_short(self, hub):
+        """response_position should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 11
+        with pytest.raises(InvalidResponseException):
+            hub.response_position(short_message)
+
+    def test_response_rollerhealth_too_short(self, hub):
+        """response_rollerhealth should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 11
+        with pytest.raises(InvalidResponseException):
+            hub.response_rollerhealth(short_message)
+
+    def test_response_discover_too_short(self, hub):
+        """response_discover should raise InvalidResponseException if message too short."""
+        short_message = b"\x00" * 9
+        with pytest.raises(InvalidResponseException):
+            hub.response_discover(short_message)
+
+
 class TestHubRecMessage:
     def test_rec_message_invalid_first_byte(self, hub):
         with pytest.raises(InvalidResponseException):
@@ -612,6 +714,30 @@ class TestHubRunStop:
         await run_task
         assert hub.running is False
         hub.disconnect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_invalid_response_disconnects(self, hub, mock_transport):
+        """InvalidResponseException during connect should call disconnect."""
+        hub.handshake.clear()
+
+        async def connect_and_stop():
+            hub.running = False
+            raise InvalidResponseException("test")
+
+        hub.connect = AsyncMock(side_effect=connect_and_stop)
+        hub.disconnect = AsyncMock()
+        mock_transport.close = AsyncMock()
+
+        await hub.run()
+        hub.disconnect.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_run_invalid_response_no_duplicate_catch(self, hub, mock_transport):
+        """Only one InvalidResponseException catch block should exist in run()."""
+        import inspect
+        source = inspect.getsource(hub.run)
+        count = source.count("except errors.InvalidResponseException")
+        assert count == 1, f"Expected 1 InvalidResponseException catch, found {count}"
 
     @pytest.mark.asyncio
     async def test_stop_already_stopped(self, hub):

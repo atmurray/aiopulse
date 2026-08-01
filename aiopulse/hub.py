@@ -2,23 +2,22 @@
 
 import asyncio
 import binascii
+import functools
 import logging
+import warnings
+from collections.abc import Callable
 from typing import (
     Any,
-    List,
-    Callable,
-    Optional,
 )
-import functools
 
 import async_timeout
 
-import aiopulse.const as const
-import aiopulse.utils as utils
-import aiopulse.errors as errors
-
 # from aiopulse import Roller, Room, Scene, Timer
+import aiopulse
+import aiopulse.const as const
+import aiopulse.errors as errors
 import aiopulse.transport
+import aiopulse.utils as utils
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,10 +26,18 @@ class Hub:
     """Representation of an Acmeda Pulse Hub."""
 
     def __init__(
-        self, host=None, loop: Optional[asyncio.events.AbstractEventLoop] = None
+        self, host=None, loop: asyncio.events.AbstractEventLoop | None = None
     ):
         """Init the hub."""
-        self.loop: asyncio.events.AbstractEventLoop = loop or asyncio.get_event_loop()
+        if loop is not None:
+            warnings.warn(
+                "loop parameter is deprecated and will be removed in v0.6.0",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.loop: asyncio.events.AbstractEventLoop = loop
+        else:
+            self.loop = asyncio.get_running_loop()
         self.topic = str.encode("Smart_Id1_y:")
         self.sequence = 4
         self.handshake = asyncio.Event()
@@ -54,7 +61,7 @@ class Hub:
         self.timers: dict[int, aiopulse.Timer] = {}
 
         self.handshake.clear()
-        self.update_callbacks: List[Callable] = []
+        self.update_callbacks: list[Callable] = []
 
     def __str__(self):
         """Returns string representation of the hub."""
@@ -77,7 +84,7 @@ class Hub:
 
     def async_add_job(
         self, target: Callable[..., Any], *args: Any
-    ) -> Optional[asyncio.Future]:
+    ) -> asyncio.Future | None:
         """Add a job from within the event loop.
 
         This method must be run in the event loop.
@@ -93,9 +100,9 @@ class Hub:
             check_target = check_target.func
 
         if asyncio.iscoroutine(check_target):
-            task = self.loop.create_task(target)  # type: ignore
+            task = asyncio.create_task(target)  # type: ignore
         elif asyncio.iscoroutinefunction(check_target):
-            task = self.loop.create_task(target(*args))
+            task = asyncio.create_task(target(*args))
         else:
             task = self.loop.run_in_executor(None, target, *args)  # type: ignore
 
@@ -108,7 +115,7 @@ class Hub:
 
     @staticmethod
     async def discover(
-        timeout=5, loop: Optional[asyncio.events.AbstractEventLoop] = None
+        timeout=5, loop: asyncio.events.AbstractEventLoop | None = None
     ):
         """Use a broadcast udp packet to find hubs on the lan."""
         discover_client = aiopulse.transport.HubTransportUdpBroadcast()
@@ -244,6 +251,11 @@ class Hub:
 
     def response_hubinfo(self, message):
         """Receive start of hub information."""
+        if len(message) < 10:
+            raise errors.InvalidResponseException(
+                f"Hub info message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 10
         self.firmware_name, ptr = utils.unpack_string(message, ptr)
         ptr += 2
@@ -258,6 +270,11 @@ class Hub:
 
     def response_roller_updated(self, message):
         """Receive change of roller information."""
+        if len(message) < 10:
+            raise errors.InvalidResponseException(
+                f"Roller updated message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 2  # sequence?
         ptr += 4
         ptr += 2  # unknown field
@@ -295,6 +312,11 @@ class Hub:
 
     def response_roomlist(self, message):
         """Receive room list."""
+        if len(message) < 12:
+            raise errors.InvalidResponseException(
+                f"Room list message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 12
         room_count, ptr = utils.unpack_int(message, ptr, 1)
         for _ in range(room_count):
@@ -312,6 +334,11 @@ class Hub:
 
     def response_rollerlist(self, message):
         """Receive roller blind list."""
+        if len(message) < 12:
+            raise errors.InvalidResponseException(
+                f"Roller list message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 2  # sequence?
         ptr += 10
         roller_count, ptr = utils.unpack_int(message, ptr, 1)
@@ -351,6 +378,11 @@ class Hub:
 
     def response_scenelist(self, message):
         """Receive scene list."""
+        if len(message) < 12:
+            raise errors.InvalidResponseException(
+                f"Scene list message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 0
         _, ptr = utils.unpack_bytes(message, ptr, 12)
         scene_count, ptr = utils.unpack_int(message, ptr, 1)
@@ -376,6 +408,11 @@ class Hub:
 
     def response_timerlist(self, message):
         """Receive timer list."""
+        if len(message) < 12:
+            raise errors.InvalidResponseException(
+                f"Timer list message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 0
         _, ptr = utils.unpack_bytes(message, ptr, 12)
         timer_count, ptr = utils.unpack_int(message, ptr, 1)
@@ -431,11 +468,21 @@ class Hub:
 
     def response_authinfo(self, message):
         """Receive acmeda account information."""
+        if len(message) < 15:
+            raise errors.InvalidResponseException(
+                f"Auth info message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 15
         _, ptr = utils.unpack_string(message, ptr)
 
     def response_position(self, message):
         """Receive change of roller position information."""
+        if len(message) < 12:
+            raise errors.InvalidResponseException(
+                f"Position message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         roller_percent, ptr = utils.unpack_roller_percent(message, ptr)
@@ -448,6 +495,11 @@ class Hub:
 
     def response_rollerhealth(self, message):
         """Receive change of roller health information."""
+        if len(message) < 12:
+            raise errors.InvalidResponseException(
+                f"Roller health message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 12
         roller_id, ptr = utils.unpack_int(message, ptr, 6)
         # letter A and then 4 bytes
@@ -483,6 +535,11 @@ class Hub:
 
     def response_discover(self, message):
         """Receive after discover broadcast packet."""
+        if len(message) < 10:
+            raise errors.InvalidResponseException(
+                f"Discover message too short: {len(message)} bytes",
+                response=message,
+            )
         ptr = 0
         _, ptr = utils.unpack_bytes(message, ptr, 10)
         _, ptr = utils.unpack_bytes(message, ptr)
@@ -704,8 +761,6 @@ class Hub:
             except errors.InvalidResponseException as inst:
                 _LOGGER.warning(f"{self.host}: Handshake failed {inst}")
                 await self.disconnect()
-            except errors.InvalidResponseException as inst:
-                _LOGGER.warning(f"{self.host}: Protocol error {inst}")
             except errors.NotConnectedException:
                 _LOGGER.debug(f"{self.host}: Disconnected, stopping parser")
             except OSError as inst:
