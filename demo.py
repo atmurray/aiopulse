@@ -44,7 +44,7 @@ class HubPrompt(cmd.Cmd):
 
     def async_add_job(
         self, target: Callable[..., Any], *args: Any
-    ) -> asyncio.Task[Any] | asyncio.Future[Any] | None:
+    ) -> asyncio.Future[Any] | None:
         """Add a job from within the event loop.
 
         This method must be run in the event loop.
@@ -52,7 +52,7 @@ class HubPrompt(cmd.Cmd):
         target: target to call.
         args: parameters for method to call.
         """
-        task: asyncio.Task[Any] | asyncio.Future[Any] | None = None
+        task: asyncio.Future[Any] | None = None
 
         # Check for partials to properly determine if coroutine function
         check_target = target
@@ -60,13 +60,11 @@ class HubPrompt(cmd.Cmd):
             check_target = check_target.func
 
         if asyncio.iscoroutine(check_target):
-            task = self.event_loop.create_task(target)  # type: ignore[arg-type]
+            task = self.event_loop.create_task(target)
         elif inspect.iscoroutinefunction(check_target):
             task = self.event_loop.create_task(target(*args))
         else:
-            task = self.event_loop.run_in_executor(  # type: ignore[assignment]
-                None, target, *args
-            )
+            task = self.event_loop.run_in_executor(None, target, *args)
 
         return task
 
