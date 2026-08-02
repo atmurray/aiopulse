@@ -1,4 +1,5 @@
 """Roller blind entity that hangs off the hub."""
+
 from __future__ import annotations
 
 import asyncio
@@ -58,10 +59,8 @@ class Roller(HubEntity):
         try:
             while running:
                 try:
-                    await asyncio.wait_for(
-                        self.health_lock.acquire(), timeout=3600
-                    )
-                except asyncio.TimeoutError:
+                    await asyncio.wait_for(self.health_lock.acquire(), timeout=3600)
+                except TimeoutError:
                     await self.get_health()
                 except asyncio.CancelledError:
                     running = False
@@ -105,7 +104,7 @@ class Roller(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            CommandType.MOVE_TO.to_bytes(4, 'big'), bytes.fromhex("2201"), message
+            CommandType.MOVE_TO.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
 
     async def move_up(self) -> None:
@@ -119,7 +118,7 @@ class Roller(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            CommandType.MOVE.to_bytes(4, 'big'), bytes.fromhex("2201"), message
+            CommandType.MOVE.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
 
     async def move_stop(self) -> None:
@@ -133,7 +132,7 @@ class Roller(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            CommandType.MOVE.to_bytes(4, 'big'), bytes.fromhex("2201"), message
+            CommandType.MOVE.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
 
     async def move_down(self) -> None:
@@ -147,7 +146,7 @@ class Roller(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_command(
-            CommandType.MOVE.to_bytes(4, 'big'), bytes.fromhex("2201"), message
+            CommandType.MOVE.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
 
     async def get_health(self) -> None:
@@ -160,5 +159,5 @@ class Roller(HubEntity):
             + bytes.fromhex("ff")
         )
         await self.hub.send_healthcheck(
-            CommandType.GET_HEALTH.to_bytes(4, 'big'), bytes.fromhex("2A01"), message
+            CommandType.GET_HEALTH.to_bytes(4, "big"), bytes.fromhex("2A01"), message
         )

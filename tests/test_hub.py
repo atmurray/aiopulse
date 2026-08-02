@@ -107,23 +107,22 @@ class TestHubConnect:
         mock_transport.receive = AsyncMock()
         # Responses: CONNECT, LOGIN, SETID, UNKNOWN1, SETID
         unknown1_extra = (
-            bytes.fromhex("06") + hub.topic
-            + bytes.fromhex(
-                "16000f0002000000000000000c000600120311073816ff9d"
-            )
+            bytes.fromhex("06")
+            + hub.topic
+            + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d")
         )
         unknown1_resp = (
             const.HEADER
-            + ResponseType.UNKNOWN1.to_bytes(4, 'big')
+            + ResponseType.UNKNOWN1.to_bytes(4, "big")
             + unknown1_extra
             + _ping_response()
         )
         mock_transport.receive.side_effect = [
-            const.HEADER + ResponseType.CONNECT.to_bytes(4, 'big') + b"Hub123",
-            const.HEADER + ResponseType.LOGIN.to_bytes(4, 'big') + b"\x00",
-            const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + _ping_response(),
+            const.HEADER + ResponseType.CONNECT.to_bytes(4, "big") + b"Hub123",
+            const.HEADER + ResponseType.LOGIN.to_bytes(4, "big") + b"\x00",
+            const.HEADER + ResponseType.SETID.to_bytes(4, "big") + _ping_response(),
             unknown1_resp,
-            const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + _ping_response(),
+            const.HEADER + ResponseType.SETID.to_bytes(4, "big") + _ping_response(),
         ]
 
         result = await hub.connect()
@@ -176,7 +175,7 @@ class TestHubGetResponse:
 
     @pytest.mark.asyncio
     async def test_get_response_matches(self, hub, mock_transport):
-        target = ResponseType.CONNECT.to_bytes(4, 'big')
+        target = ResponseType.CONNECT.to_bytes(4, "big")
         raw = const.HEADER + target + b"extra"
         mock_transport.receive = AsyncMock(return_value=raw)
 
@@ -188,25 +187,34 @@ class TestHubGetResponse:
         mock_transport.receive = AsyncMock(return_value=b"\x00\x00")
 
         with pytest.raises(InvalidResponseException):
-            await hub.get_response(ResponseType.CONNECT.to_bytes(4, 'big'))
+            await hub.get_response(ResponseType.CONNECT.to_bytes(4, "big"))
 
     @pytest.mark.asyncio
     async def test_get_response_wrong_header(self, hub, mock_transport):
         mock_transport.receive = AsyncMock(return_value=b"\xff\xff\xff\xff\x00\x00")
 
         with pytest.raises(InvalidResponseException):
-            await hub.get_response(ResponseType.CONNECT.to_bytes(4, 'big'))
+            await hub.get_response(ResponseType.CONNECT.to_bytes(4, "big"))
 
 
 class TestHubResponseHandlers:
     def test_response_hubinfo(self, hub):
         message = (
             b"\x00" * 10
-            + b"\x07\x00" + b"Firm v1" + b"\x00" * 2
-            + b"\x04\x00" + b"Skip" + b"\x00" * 2
-            + b"\x07\x00" + b"ESP8266" + b"\x00" * 2
-            + b"\x11\x00" + b"AA:BB:CC:DD:EE:FF" + b"\x00" * 2
-            + b"\x0e\x00" + b"192.168.1.100"
+            + b"\x07\x00"
+            + b"Firm v1"
+            + b"\x00" * 2
+            + b"\x04\x00"
+            + b"Skip"
+            + b"\x00" * 2
+            + b"\x07\x00"
+            + b"ESP8266"
+            + b"\x00" * 2
+            + b"\x11\x00"
+            + b"AA:BB:CC:DD:EE:FF"
+            + b"\x00" * 2
+            + b"\x0e\x00"
+            + b"192.168.1.100"
         )
         hub.response_hubinfo(message)
         assert hub.firmware_name == "Firm v1"
@@ -219,14 +227,18 @@ class TestHubResponseHandlers:
         hub.rooms[b"\x01\x00\x00\x00"].name = "Living Room"
         message = (
             b"\x00" * 10
-            + b"\x04\x00" + b"\x01\x00\x00\x00"
+            + b"\x04\x00"
+            + b"\x01\x00\x00\x00"
             + b"\x00" * 4
             + b"\x01"
             + b"\x00" * 2
-            + b"\x06\x00" + b"Blind1"
+            + b"\x06\x00"
+            + b"Blind1"
             + b"\x00" * 10
             + b"\x01\x00\x00\x00\x00\x00"
-            + b"\x00\x00\x00\x00" + b"\x12" + b"\x00\x00\x00\x00\x00"
+            + b"\x00\x00\x00\x00"
+            + b"\x12"
+            + b"\x00\x00\x00\x00\x00"
             + b"\x00"
             + b"\x00\x00"
         )
@@ -245,14 +257,18 @@ class TestHubResponseHandlers:
         hub.rooms[b"\x02\x00\x00\x00"].name = "Kitchen"
         message = (
             b"\x00" * 10
-            + b"\x04\x00" + b"\x02\x00\x00\x00"
+            + b"\x04\x00"
+            + b"\x02\x00\x00\x00"
             + b"\x00" * 4
             + b"\x02"
             + b"\x00" * 2
-            + b"\x06\x00" + b"Blind2"
+            + b"\x06\x00"
+            + b"Blind2"
             + b"\x00" * 10
             + b"\x01\x00\x00\x00\x00\x00"
-            + b"\x00\x00\x00\x00" + b"\x10" + b"\x00\x00\x00\x00\x00"
+            + b"\x00\x00\x00\x00"
+            + b"\x10"
+            + b"\x00\x00\x00\x00\x00"
             + b"\x00"
             + b"\x00\x00"
         )
@@ -263,17 +279,21 @@ class TestHubResponseHandlers:
             b"\x00" * 12
             + b"\x02"
             + b"\x00\x00"
-            + b"\x04\x00" + b"\x01\x01\x01\x01"
+            + b"\x04\x00"
+            + b"\x01\x01\x01\x01"
             + b"\x00" * 4
             + b"\x03"
             + b"\x00\x00"
-            + b"\x06\x00" + b"Living"
+            + b"\x06\x00"
+            + b"Living"
             + b"\x00\x00"
-            + b"\x04\x00" + b"\x02\x02\x02\x02"
+            + b"\x04\x00"
+            + b"\x02\x02\x02\x02"
             + b"\x00" * 4
             + b"\x01"
             + b"\x00\x00"
-            + b"\x07\x00" + b"Kitchen"
+            + b"\x07\x00"
+            + b"Kitchen"
         )
         hub.response_roomlist(room_data)
         assert len(hub.rooms) == 2
@@ -286,14 +306,19 @@ class TestHubResponseHandlers:
             + b"\x00" * 4
             + b"\x01\x00\x00\x00\x00\x00"
             + b"\x00\x00"
-            + b"\x04\x00" + b"\x01\x00\x00\x00"
+            + b"\x04\x00"
+            + b"\x01\x00\x00\x00"
             + b"\x00" * 4
             + b"\x01"
             + b"\x00" * 2
-            + b"\x06\x00" + b"Blind1"
+            + b"\x06\x00"
+            + b"Blind1"
             + b"\x00" * 8
-            + b"\x02\x00" + b"S1"
-            + b"\x00\x00\x00\x00" + b"\x12" + b"\x00\x00\x00\x00\x00"
+            + b"\x02\x00"
+            + b"S1"
+            + b"\x00\x00\x00\x00"
+            + b"\x12"
+            + b"\x00\x00\x00\x00\x00"
             + b"\x00"
         )
         hub.response_rollerlist(message)
@@ -308,11 +333,13 @@ class TestHubResponseHandlers:
             b"\x00" * 12
             + b"\x01"
             + b"\x00\x00"
-            + b"\x04\x00" + b"\x01\x01\x01\x01"
+            + b"\x04\x00"
+            + b"\x01\x01\x01\x01"
             + b"\x00" * 4
             + b"\x02"
             + b"\x00\x00"
-            + b"\x06\x00" + b"Scene1"
+            + b"\x06\x00"
+            + b"Scene1"
             + b"\x00" * 5
             + b"\x00\x00"
         )
@@ -329,11 +356,13 @@ class TestHubResponseHandlers:
             b"\x00" * 12
             + b"\x01"
             + b"\x00\x00"
-            + b"\x04\x00" + b"\x01\x01\x01\x01"
+            + b"\x04\x00"
+            + b"\x01\x01\x01\x01"
             + b"\x00" * 4
             + b"\x03"
             + b"\x00\x00"
-            + b"\x06\x00" + b"Timer1"
+            + b"\x06\x00"
+            + b"Timer1"
             + b"\x00" * 4
             + b"\x01"
             + b"\x00" * 4
@@ -361,11 +390,13 @@ class TestHubResponseHandlers:
             b"\x00" * 12
             + b"\x01"
             + b"\x00\x00"
-            + b"\x04\x00" + b"\x05\x05\x05\x05"
+            + b"\x04\x00"
+            + b"\x05\x05\x05\x05"
             + b"\x00" * 4
             + b"\x01"
             + b"\x00\x00"
-            + b"\x08\x00" + b"SceneTim"
+            + b"\x08\x00"
+            + b"SceneTim"
             + b"\x00" * 4
             + b"\x01"
             + b"\x00" * 4
@@ -377,7 +408,8 @@ class TestHubResponseHandlers:
             + b"\x00" * 4
             + b"\x00\x00"
             + b"\x00\x00\x10\x02"
-            + b"\x04\x00" + b"\x01\x01\x01\x01"
+            + b"\x04\x00"
+            + b"\x01\x01\x01\x01"
             + b"\x00\x00"
         )
         hub.response_timerlist(message)
@@ -394,7 +426,9 @@ class TestHubResponseHandlers:
         message = (
             b"\x00" * 12
             + b"\x01\x00\x00\x00\x00\x00"
-            + b"\x00\x00\x00\x00" + b"\x12" + b"\x00\x00\x00\x00\x00"
+            + b"\x00\x00\x00\x00"
+            + b"\x12"
+            + b"\x00\x00\x00\x00\x00"
             + b"\x00"
         )
         hub.response_position(message)
@@ -408,9 +442,12 @@ class TestHubResponseHandlers:
         message = (
             b"\x00" * 12
             + b"\x01\x00\x00\x00\x00\x00"
-            + b"A" + b"\x00" * 4
-            + b"B" + b"\x00" * 4
-            + b"C" + b"\x00" * 4
+            + b"A"
+            + b"\x00" * 4
+            + b"B"
+            + b"\x00" * 4
+            + b"C"
+            + b"\x00" * 4
             + b"\x00" * 3
             + b"\x0a"
             + b"\x00"
@@ -494,27 +531,23 @@ class TestHubRecMessage:
 
     def test_rec_message_acknowledgement(self, hub):
         hub.command_lock = asyncio.Lock()
+
         async def do_test():
             await hub.command_lock.acquire()
             hub.rec_message(b"")
             assert not hub.command_lock.locked()
+
         asyncio.run(do_test())
 
     def test_rec_message_known_type(self, hub):
         message = (
-            b"\x06" + hub.topic
-            + b"\x00\x00"
-            + bytes.fromhex("0d00")
-            + b"\x00" * 4
+            b"\x06" + hub.topic + b"\x00\x00" + bytes.fromhex("0d00") + b"\x00" * 4
         )
         hub.rec_message(message)
 
     def test_rec_message_unknown_type(self, hub):
         message = (
-            b"\x06" + hub.topic
-            + b"\x00\x00"
-            + bytes.fromhex("ffff")
-            + b"\x00" * 4
+            b"\x06" + hub.topic + b"\x00\x00" + bytes.fromhex("ffff") + b"\x00" * 4
         )
         hub.rec_message(message)
 
@@ -557,7 +590,7 @@ class TestHubResponseParser:
 
         async def slow_timeout():
             await asyncio.sleep(0.001)
-            raise asyncio.TimeoutError
+            raise TimeoutError
 
         mock_transport.receive = AsyncMock(side_effect=slow_timeout)
         mock_transport.send = MagicMock()
@@ -568,10 +601,10 @@ class TestHubResponseParser:
         await asyncio.sleep(0.01)
         try:
             await task
-        except (asyncio.CancelledError, asyncio.TimeoutError):
+        except (asyncio.CancelledError, TimeoutError):
             pass
         mock_transport.send.assert_called_with(
-            const.HEADER + CommandType.PING.to_bytes(4, 'big')
+            const.HEADER + CommandType.PING.to_bytes(4, "big")
         )
 
     @pytest.mark.asyncio
@@ -591,10 +624,10 @@ class TestHubResponseParser:
         await asyncio.sleep(0.01)
         try:
             await task
-        except (asyncio.CancelledError, asyncio.TimeoutError):
+        except (asyncio.CancelledError, TimeoutError):
             pass
         mock_transport.send.assert_called_with(
-            const.HEADER + CommandType.PING.to_bytes(4, 'big')
+            const.HEADER + CommandType.PING.to_bytes(4, "big")
         )
 
 
@@ -604,7 +637,7 @@ class TestHubSendCommand:
         hub.running = False
         with pytest.raises(NotRunningException):
             await hub.send_command(
-                CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
+                CommandType.GET_HUB_INFO.to_bytes(4, "big"),
                 bytes.fromhex("F000"),
                 b"\x00" * 7,
             )
@@ -620,7 +653,7 @@ class TestHubSendCommand:
         hub.command_lock.release = MagicMock()
 
         await hub.send_command(
-            CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
+            CommandType.GET_HUB_INFO.to_bytes(4, "big"),
             bytes.fromhex("F000"),
             b"\x00" * 7,
         )
@@ -639,14 +672,14 @@ class TestHubSendCommand:
             call_count[0] += 1
             if call_count[0] == 1:
                 return
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         hub.command_lock.acquire = AsyncMock(side_effect=mock_acquire)
         hub.command_lock.locked = MagicMock(return_value=True)
         hub.command_lock.release = MagicMock()
 
         await hub.send_command(
-            CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
+            CommandType.GET_HUB_INFO.to_bytes(4, "big"),
             bytes.fromhex("F000"),
             b"\x00" * 7,
             timeout=0.01,
@@ -668,9 +701,9 @@ class TestHubSendHealthcheck:
             return True
 
         with patch.object(hub.health_lock, "acquire") as mock_acquire:
-            mock_acquire.side_effect = [True, asyncio.TimeoutError]
+            mock_acquire.side_effect = [True, TimeoutError]
             await hub.send_healthcheck(
-                CommandType.GET_HEALTH.to_bytes(4, 'big'),
+                CommandType.GET_HEALTH.to_bytes(4, "big"),
                 bytes.fromhex("2A01"),
                 b"\x00" * 10,
             )
@@ -725,6 +758,7 @@ class TestHubRunStop:
     async def test_run_invalid_response_no_duplicate_catch(self, hub, mock_transport):
         """Only one InvalidResponseException catch block should exist in run()."""
         import inspect
+
         source = inspect.getsource(hub.run)
         count = source.count("except errors.InvalidResponseException")
         assert count == 1, f"Expected 1 InvalidResponseException catch, found {count}"
@@ -759,7 +793,7 @@ class TestHubDiscover:
 
             async def _receive():
                 await asyncio.sleep(0.001)
-                raise asyncio.TimeoutError
+                raise TimeoutError
 
             mock_client = MagicMock()
             mock_client.connect = AsyncMock()
@@ -771,7 +805,7 @@ class TestHubDiscover:
             gen = Hub.discover(timeout=0.01)
             try:
                 await asyncio.wait_for(gen.__anext__(), timeout=2.0)
-            except (StopAsyncIteration, asyncio.TimeoutError):
+            except (StopAsyncIteration, TimeoutError):
                 pass
             finally:
                 await gen.aclose()
@@ -781,8 +815,10 @@ class TestHubDiscover:
 
     @pytest.mark.asyncio
     async def test_discover_with_hub(self):
-        with patch.object(aiopulse.transport, "HubTransportUdpBroadcast") as mock_cls, \
-             patch.object(aiopulse.transport, "HubTransportTcp") as mock_tcp_cls:
+        with (
+            patch.object(aiopulse.transport, "HubTransportUdpBroadcast") as mock_cls,
+            patch.object(aiopulse.transport, "HubTransportTcp") as mock_tcp_cls,
+        ):
 
             async def _receive():
                 await asyncio.sleep(0.001)
@@ -802,23 +838,22 @@ class TestHubDiscover:
             mock_tcp.send = MagicMock()
             mock_tcp.receive = AsyncMock()
             unknown1_extra = (
-                bytes.fromhex("06") + b"Smart_Id1_y:"
-                + bytes.fromhex(
-                    "16000f0002000000000000000c000600120311073816ff9d"
-                )
+                bytes.fromhex("06")
+                + b"Smart_Id1_y:"
+                + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d")
             )
             unknown1_resp = (
                 const.HEADER
-                + ResponseType.UNKNOWN1.to_bytes(4, 'big')
+                + ResponseType.UNKNOWN1.to_bytes(4, "big")
                 + unknown1_extra
                 + ping
             )
             mock_tcp.receive.side_effect = [
-                const.HEADER + ResponseType.CONNECT.to_bytes(4, 'big') + b"12",
-                const.HEADER + ResponseType.LOGIN.to_bytes(4, 'big') + b"\x00",
-                const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + ping,
+                const.HEADER + ResponseType.CONNECT.to_bytes(4, "big") + b"12",
+                const.HEADER + ResponseType.LOGIN.to_bytes(4, "big") + b"\x00",
+                const.HEADER + ResponseType.SETID.to_bytes(4, "big") + ping,
                 unknown1_resp,
-                const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + ping,
+                const.HEADER + ResponseType.SETID.to_bytes(4, "big") + ping,
             ]
             mock_tcp.close = AsyncMock()
             mock_tcp_cls.return_value = mock_tcp
@@ -828,7 +863,7 @@ class TestHubDiscover:
             try:
                 hub = await asyncio.wait_for(gen.__anext__(), timeout=2.0)
                 hubs.append(hub)
-            except (StopAsyncIteration, asyncio.TimeoutError):
+            except (StopAsyncIteration, TimeoutError):
                 pass
             finally:
                 await gen.aclose()
@@ -838,8 +873,10 @@ class TestHubDiscover:
 
     @pytest.mark.asyncio
     async def test_discover_connect_failure(self):
-        with patch.object(aiopulse.transport, "HubTransportUdpBroadcast") as mock_cls, \
-             patch.object(aiopulse.transport, "HubTransportTcp") as mock_tcp_cls:
+        with (
+            patch.object(aiopulse.transport, "HubTransportUdpBroadcast") as mock_cls,
+            patch.object(aiopulse.transport, "HubTransportTcp") as mock_tcp_cls,
+        ):
 
             async def _receive():
                 await asyncio.sleep(0.001)
@@ -862,7 +899,7 @@ class TestHubDiscover:
             try:
                 hub = await asyncio.wait_for(gen.__anext__(), timeout=2.0)
                 hubs.append(hub)
-            except (StopAsyncIteration, asyncio.TimeoutError):
+            except (StopAsyncIteration, TimeoutError):
                 pass
             finally:
                 await gen.aclose()
@@ -879,7 +916,7 @@ class TestHubUpdate:
 
         await hub.update()
         hub.send_command.assert_awaited_once_with(
-            CommandType.GET_HUB_INFO.to_bytes(4, 'big'),
+            CommandType.GET_HUB_INFO.to_bytes(4, "big"),
             bytes.fromhex("F000"),
             bytes.fromhex("000000000000FF"),
         )
