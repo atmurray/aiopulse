@@ -1,7 +1,9 @@
 """Demo."""
+
 import asyncio
 import cmd
 import functools
+import inspect
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -9,10 +11,10 @@ from typing import Any
 import aiopulse
 
 logging.basicConfig()
-_LOGGER = logging.getLogger('aiopulse.hub')
+_LOGGER = logging.getLogger("aiopulse.hub")
 
 
-async def discover(prompt: 'HubPrompt') -> None:
+async def discover(prompt: "HubPrompt") -> None:
     """Task to discover all hubs on the local network."""
     print("Starting hub discovery")
     async for hub in aiopulse.Hub.discover():
@@ -42,7 +44,7 @@ class HubPrompt(cmd.Cmd):
 
     def async_add_job(
         self, target: Callable[..., Any], *args: Any
-    ) -> asyncio.Future[Any] | None:
+    ) -> asyncio.Task[Any] | asyncio.Future[Any] | None:
         """Add a job from within the event loop.
 
         This method must be run in the event loop.
@@ -50,7 +52,7 @@ class HubPrompt(cmd.Cmd):
         target: target to call.
         args: parameters for method to call.
         """
-        task: asyncio.Future[Any] | None = None
+        task: asyncio.Task[Any] | asyncio.Future[Any] | None = None
 
         # Check for partials to properly determine if coroutine function
         check_target = target
@@ -59,7 +61,7 @@ class HubPrompt(cmd.Cmd):
 
         if asyncio.iscoroutine(check_target):
             task = self.event_loop.create_task(target)  # type: ignore[arg-type]
-        elif asyncio.iscoroutinefunction(check_target):
+        elif inspect.iscoroutinefunction(check_target):
             task = self.event_loop.create_task(target(*args))
         else:
             task = self.event_loop.run_in_executor(  # type: ignore[assignment]
@@ -91,7 +93,7 @@ class HubPrompt(cmd.Cmd):
 
     def default(self, line: str) -> None:
         """Handle unknown commands, including EOF."""
-        if line == 'EOF':
+        if line == "EOF":
             print("Exiting")
             self.running = False
             return

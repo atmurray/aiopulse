@@ -40,7 +40,7 @@ class HubTransportUdp(HubTransportBase):
         """Constructor for UDP transport class."""
         self.host = host
         self.port = port
-        self.transport: asyncio.DatagramTransport | None = None  # type: ignore[assignment]
+        self.transport: asyncio.DatagramTransport | None = None  # pyright: ignore[reportAttributeAccessIssue]
         self.protocol: asyncio.DatagramProtocol | None = None
         self.is_udp: bool = True
         self.receive_queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = (
