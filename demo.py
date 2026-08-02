@@ -68,6 +68,7 @@ class HubPrompt(cmd.Cmd):
             coro = target(*args)  # type: ignore[assignment]
             task = self.event_loop.create_task(coro)
         else:
+            # target is a regular function, run it in executor
             task = self.event_loop.run_in_executor(None, target, *args)
 
         return task
