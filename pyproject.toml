@@ -62,6 +62,7 @@ disallow_untyped_defs = false
 target-version = "py310"
 line-length = 88
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["N818"]  # Exception naming - HubBaseException is already public API
 
 [tool.bumpver]
 current_version = "0.5.0"

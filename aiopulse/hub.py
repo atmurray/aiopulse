@@ -77,7 +77,7 @@ class Hub(CallbackMixin):
         timeout: int = 5,
         loop: asyncio.events.AbstractEventLoop | None = None,
         bind_address: str | None = None,
-    ) -> AsyncGenerator['Hub', None]:
+    ) -> AsyncGenerator["Hub", None]:
         """Use a broadcast udp packet to find hubs on the lan.
 
         Args:
@@ -107,7 +107,9 @@ class Hub(CallbackMixin):
                             async with async_timeout.timeout(timeout):
                                 (response, addr) = await discover_client.receive()
                                 _LOGGER.debug(
-                                    f"{addr[0]}: Received discover response: {response.hex()}"
+                                    "%s: Received discover response: %s",
+                                    addr[0],
+                                    response.hex(),
                                 )
                         except asyncio.TimeoutError:
                             pass
@@ -241,6 +243,7 @@ class Hub(CallbackMixin):
         self.mac_address, ptr = utils.unpack_string(message, ptr)
         ptr += 2
         self.ip_address, ptr = utils.unpack_string(message, ptr)
+        _LOGGER.info(f"{self.host}: Hub info: {self}")
         self.notify_callback(const.UpdateType.info)
 
     def response_roller_updated(self, message: bytes) -> None:
@@ -278,7 +281,7 @@ class Hub(CallbackMixin):
             roller.room = None
         roller.closed_percent = roller_percent
         roller.flags = roller_flags
-        _LOGGER.info(roller)
+        _LOGGER.info(f"{self.host}: Roller updated: {roller}")
         roller.notify_callback()
         self.notify_callback(const.UpdateType.rollers)
 
@@ -305,6 +308,7 @@ class Hub(CallbackMixin):
                 self.rooms[room_id] = aiopulse.Room(self, room_id)
             self.rooms[room_id].icon = icon
             self.rooms[room_id].name = room_name
+            _LOGGER.info(f"{self.host}: Room updated: {self.rooms[room_id]}")
         self.notify_callback(const.UpdateType.rooms)
 
     def response_rollerlist(self, message: bytes) -> None:
@@ -346,7 +350,7 @@ class Hub(CallbackMixin):
                 roller.room = None
             roller.closed_percent = roller_percent
             roller.flags = roller_flags
-            _LOGGER.info(roller)
+            _LOGGER.info(f"{self.host}: Roller updated: {roller}")
             roller.notify_callback()
 
         self.notify_callback(const.UpdateType.rollers)
@@ -378,6 +382,7 @@ class Hub(CallbackMixin):
                 self.scenes[scene_id] = aiopulse.Scene(self, scene_id)
             self.scenes[scene_id].icon = icon
             self.scenes[scene_id].name = scene_name
+            _LOGGER.info(f"{self.host}: Scene updated: {self.scenes[scene_id]}")
         _, ptr = utils.unpack_bytes(message, ptr, 2)
         self.notify_callback(const.UpdateType.scenes)
 
@@ -416,9 +421,7 @@ class Hub(CallbackMixin):
                 percent, ptr = utils.unpack_int(message, ptr, 1)
                 _, ptr = utils.unpack_bytes(message, ptr, 5)
                 roller_id, ptr = utils.unpack_int(message, ptr, 6)
-                _LOGGER.debug(
-                    f"Timer {timer_id.hex()} is for roller {roller_id} at {percent}%"
-                )
+                _LOGGER.debug(f"Timer {timer_name} at {percent}%")
                 if roller_id in self.rollers:
                     entity = self.rollers[roller_id]
             elif timer_type == b"\x00\x00\x10\x02":  # Scene Timer
@@ -440,6 +443,8 @@ class Hub(CallbackMixin):
             self.timers[timer_id].minute = minute
             self.timers[timer_id].days = days
             self.timers[timer_id].entity = entity
+
+            _LOGGER.info(f"Timer added: {self.timers[timer_id]}")
         _, ptr = utils.unpack_bytes(message, ptr, 2)
         self.notify_callback(const.UpdateType.timers)
 
@@ -468,7 +473,11 @@ class Hub(CallbackMixin):
             self.rollers[roller_id].closed_percent = roller_percent
             self.rollers[roller_id].flags = roller_flags
             self.rollers[roller_id].notify_callback()
-            _LOGGER.info(self.rollers[roller_id])
+            _LOGGER.info(f"{self.host}: Roller updated: {self.rollers[roller_id]}")
+        else:
+            _LOGGER.warning(
+                f"{self.host}: Received position update for unknown roller {roller_id}"
+            )
 
     def response_rollerhealth(self, message: bytes) -> None:
         """Receive change of roller health information."""
@@ -505,6 +514,9 @@ class Hub(CallbackMixin):
         ptr += 2  # checksum
         if roller_id in self.rollers:
             self.rollers[roller_id].battery = roller_battery
+            _LOGGER.info(
+                f"{self.host}: Roller health updated: {self.rollers[roller_id]}"
+            )
             self.rollers[roller_id].health_updated()
             self.rollers[roller_id].notify_callback()
         if self.health_lock.locked():
@@ -580,7 +592,10 @@ class Hub(CallbackMixin):
                 self.msgmap[mtype].execute(self, message[ptr:])
             else:
                 _LOGGER.warning(
-                    f"{self.host}: Unable to parse message {mtype.hex()} message {message.hex()}"
+                    "%s: Unable to parse message %s message %s",
+                    self.host,
+                    mtype.hex(),
+                    message.hex(),
                 )
         else:
             """message is the acknowledgement of a command"""

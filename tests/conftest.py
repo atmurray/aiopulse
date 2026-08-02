@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -26,7 +26,9 @@ def mock_transport():
 
 @pytest.fixture
 def hub(event_loop, mock_transport):
-    with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
+    with patch.object(
+        aiopulse.transport, "HubTransportTcp", return_value=mock_transport
+    ):
         h = Hub(host="192.168.1.100", loop=event_loop)
         h.running = False
         h._schedule_callback = MagicMock(return_value=MagicMock())

@@ -1,8 +1,8 @@
 from aiopulse.const import (
-    UpdateType,
-    MessageType,
     CommandType,
+    MessageType,
     ResponseType,
+    UpdateType,
 )
 
 

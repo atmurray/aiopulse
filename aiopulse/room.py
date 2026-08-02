@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import aiopulse.utils as utils
-from aiopulse.entities import HubEntity
 from aiopulse.const import CommandType
+from aiopulse.entities import HubEntity
 
 if TYPE_CHECKING:
     from aiopulse.hub import Hub

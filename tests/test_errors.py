@@ -1,11 +1,10 @@
-import pytest
 
 from aiopulse.errors import (
+    CannotConnectException,
     HubBaseException,
+    InvalidResponseException,
     NotConnectedException,
     NotRunningException,
-    CannotConnectException,
-    InvalidResponseException,
 )
 
 

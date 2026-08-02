@@ -1,18 +1,18 @@
 """Rollease Acmeda Automate Pulse asyncio protocol implementation."""
 import logging
 
+from aiopulse.const import UpdateType
+from aiopulse.errors import (
+    CannotConnectException,
+    InvalidResponseException,
+    NotConnectedException,
+    NotRunningException,
+)
 from aiopulse.hub import Hub
 from aiopulse.roller import Roller
 from aiopulse.room import Room
 from aiopulse.scene import Scene
 from aiopulse.timer import Timer
-from aiopulse.errors import (
-    CannotConnectException,
-    NotConnectedException,
-    NotRunningException,
-    InvalidResponseException,
-)
-from aiopulse.const import UpdateType
 
 __all__ = [
     "Hub",

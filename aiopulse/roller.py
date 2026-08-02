@@ -6,8 +6,8 @@ import logging
 from typing import TYPE_CHECKING
 
 import aiopulse.utils as utils
-from aiopulse.entities import HubEntity
 from aiopulse.const import CommandType
+from aiopulse.entities import HubEntity
 
 if TYPE_CHECKING:
     from aiopulse.hub import Hub
@@ -31,7 +31,7 @@ class Roller(HubEntity):
         self.type: int | None = None
         self.serial: str | None = None
         self.room_id: bytes | None = None
-        self.room: 'Room | None' = None
+        self.room: Room | None = None
         self.battery: int | None = None
         self.closed_percent: int | None = None
         self.flags: int = 0

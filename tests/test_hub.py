@@ -1,19 +1,18 @@
 import asyncio
 import warnings
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import aiopulse.transport
 import aiopulse.const as const
+import aiopulse.transport
 from aiopulse.const import CommandType, ResponseType
-from aiopulse.hub import Hub
 from aiopulse.errors import (
     CannotConnectException,
-    NotConnectedException,
-    NotRunningException,
     InvalidResponseException,
+    NotRunningException,
 )
+from aiopulse.hub import Hub
 
 
 # Helper to create a valid parseable ping response payload
@@ -36,7 +35,9 @@ class TestHubInit:
 
     def test_init_without_host(self, event_loop):
         mock_transport = MagicMock(spec=aiopulse.transport.HubTransportTcp)
-        with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
+        with patch.object(
+            aiopulse.transport, "HubTransportTcp", return_value=mock_transport
+        ):
             h = Hub(loop=event_loop)
             assert h.host is None
             assert h.running is False
@@ -55,7 +56,9 @@ class TestHubInit:
 class TestHubDeprecation:
     def test_loop_parameter_deprecation(self, event_loop, mock_transport):
         """Passing loop parameter should emit DeprecationWarning."""
-        with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
+        with patch.object(
+            aiopulse.transport, "HubTransportTcp", return_value=mock_transport
+        ):
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 Hub(host="192.168.1.100", loop=event_loop)
@@ -65,7 +68,9 @@ class TestHubDeprecation:
 
     def test_no_loop_no_warning(self, mock_transport):
         """When loop is None and get_running_loop succeeds, no deprecation warning."""
-        with patch.object(aiopulse.transport, "HubTransportTcp", return_value=mock_transport):
+        with patch.object(
+            aiopulse.transport, "HubTransportTcp", return_value=mock_transport
+        ):
             with patch("asyncio.get_running_loop") as mock_get_loop:
                 mock_get_loop.return_value = MagicMock()
                 with warnings.catch_warnings(record=True) as w:
@@ -100,12 +105,24 @@ class TestHubConnect:
         mock_transport.is_udp = False
         mock_transport.send = MagicMock()
         mock_transport.receive = AsyncMock()
-        # Responses: CONNECT, LOGIN, SETID(->response_parse), UNKNOWN1(->response_parse), SETID(->response_parse)
+        # Responses: CONNECT, LOGIN, SETID, UNKNOWN1, SETID
+        unknown1_extra = (
+            bytes.fromhex("06") + hub.topic
+            + bytes.fromhex(
+                "16000f0002000000000000000c000600120311073816ff9d"
+            )
+        )
+        unknown1_resp = (
+            const.HEADER
+            + ResponseType.UNKNOWN1.to_bytes(4, 'big')
+            + unknown1_extra
+            + _ping_response()
+        )
         mock_transport.receive.side_effect = [
             const.HEADER + ResponseType.CONNECT.to_bytes(4, 'big') + b"Hub123",
             const.HEADER + ResponseType.LOGIN.to_bytes(4, 'big') + b"\x00",
             const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + _ping_response(),
-            const.HEADER + ResponseType.UNKNOWN1.to_bytes(4, 'big') + bytes.fromhex("06") + hub.topic + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d") + _ping_response(),
+            unknown1_resp,
             const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + _ping_response(),
         ]
 
@@ -406,61 +423,61 @@ class TestHubResponseHandlers:
 
 class TestHubBoundsChecking:
     def test_response_hubinfo_too_short(self, hub):
-        """response_hubinfo should raise InvalidResponseException if message too short."""
+        """response_hubinfo should raise if message too short."""
         short_message = b"\x00" * 9  # less than 10 bytes
         with pytest.raises(InvalidResponseException):
             hub.response_hubinfo(short_message)
 
     def test_response_roller_updated_too_short(self, hub):
-        """response_roller_updated should raise InvalidResponseException if message too short."""
+        """response_roller_updated should raise if message too short."""
         short_message = b"\x00" * 9
         with pytest.raises(InvalidResponseException):
             hub.response_roller_updated(short_message)
 
     def test_response_roomlist_too_short(self, hub):
-        """response_roomlist should raise InvalidResponseException if message too short."""
+        """response_roomlist should raise if message too short."""
         short_message = b"\x00" * 11
         with pytest.raises(InvalidResponseException):
             hub.response_roomlist(short_message)
 
     def test_response_rollerlist_too_short(self, hub):
-        """response_rollerlist should raise InvalidResponseException if message too short."""
+        """response_rollerlist should raise if message too short."""
         short_message = b"\x00" * 11
         with pytest.raises(InvalidResponseException):
             hub.response_rollerlist(short_message)
 
     def test_response_scenelist_too_short(self, hub):
-        """response_scenelist should raise InvalidResponseException if message too short."""
+        """response_scenelist should raise if message too short."""
         short_message = b"\x00" * 11
         with pytest.raises(InvalidResponseException):
             hub.response_scenelist(short_message)
 
     def test_response_timerlist_too_short(self, hub):
-        """response_timerlist should raise InvalidResponseException if message too short."""
+        """response_timerlist should raise if message too short."""
         short_message = b"\x00" * 11
         with pytest.raises(InvalidResponseException):
             hub.response_timerlist(short_message)
 
     def test_response_authinfo_too_short(self, hub):
-        """response_authinfo should raise InvalidResponseException if message too short."""
+        """response_authinfo should raise if message too short."""
         short_message = b"\x00" * 14
         with pytest.raises(InvalidResponseException):
             hub.response_authinfo(short_message)
 
     def test_response_position_too_short(self, hub):
-        """response_position should raise InvalidResponseException if message too short."""
+        """response_position should raise if message too short."""
         short_message = b"\x00" * 11
         with pytest.raises(InvalidResponseException):
             hub.response_position(short_message)
 
     def test_response_rollerhealth_too_short(self, hub):
-        """response_rollerhealth should raise InvalidResponseException if message too short."""
+        """response_rollerhealth should raise if message too short."""
         short_message = b"\x00" * 11
         with pytest.raises(InvalidResponseException):
             hub.response_rollerhealth(short_message)
 
     def test_response_discover_too_short(self, hub):
-        """response_discover should raise InvalidResponseException if message too short."""
+        """response_discover should raise if message too short."""
         short_message = b"\x00" * 9
         with pytest.raises(InvalidResponseException):
             hub.response_discover(short_message)
@@ -784,11 +801,23 @@ class TestHubDiscover:
             mock_tcp.connect = AsyncMock()
             mock_tcp.send = MagicMock()
             mock_tcp.receive = AsyncMock()
+            unknown1_extra = (
+                bytes.fromhex("06") + b"Smart_Id1_y:"
+                + bytes.fromhex(
+                    "16000f0002000000000000000c000600120311073816ff9d"
+                )
+            )
+            unknown1_resp = (
+                const.HEADER
+                + ResponseType.UNKNOWN1.to_bytes(4, 'big')
+                + unknown1_extra
+                + ping
+            )
             mock_tcp.receive.side_effect = [
                 const.HEADER + ResponseType.CONNECT.to_bytes(4, 'big') + b"12",
                 const.HEADER + ResponseType.LOGIN.to_bytes(4, 'big') + b"\x00",
                 const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + ping,
-                const.HEADER + ResponseType.UNKNOWN1.to_bytes(4, 'big') + bytes.fromhex("06") + b"Smart_Id1_y:" + bytes.fromhex("16000f0002000000000000000c000600120311073816ff9d") + ping,
+                unknown1_resp,
                 const.HEADER + ResponseType.SETID.to_bytes(4, 'big') + ping,
             ]
             mock_tcp.close = AsyncMock()

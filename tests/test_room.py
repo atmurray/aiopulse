@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from aiopulse.room import Room
 from aiopulse.entities import HubEntity
+from aiopulse.room import Room
 
 
 class TestRoom:

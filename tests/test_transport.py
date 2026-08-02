@@ -1,15 +1,15 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from aiopulse.errors import NotConnectedException
 from aiopulse.transport import (
     HubTransportBase,
+    HubTransportTcp,
     HubTransportUdp,
     HubTransportUdpBroadcast,
-    HubTransportTcp,
 )
-from aiopulse.errors import NotConnectedException
 
 
 class TestHubTransportBase:

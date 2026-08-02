@@ -1,6 +1,11 @@
-import pytest
 
-from aiopulse.utils import unpack_int, pack_int, unpack_bytes, unpack_string, unpack_roller_percent
+from aiopulse.utils import (
+    pack_int,
+    unpack_bytes,
+    unpack_int,
+    unpack_roller_percent,
+    unpack_string,
+)
 
 
 class TestUnpackInt:

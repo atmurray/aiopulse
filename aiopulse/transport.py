@@ -136,7 +136,10 @@ class HubTransportUdpBroadcast(HubTransportUdp):
             for name, addrs in psutil.net_if_addrs().items():
                 for addr in addrs:
                     _LOGGER.debug(
-                        f"Interface {name} has address {addr.address} (family {addr.family})"
+                        "Interface %s has address %s (family %s)",
+                        name,
+                        addr.address,
+                        addr.family,
                     )
                     if addr.family == socket.AF_INET:
                         interfaces.append(addr.address)
