@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import inspect
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -51,7 +52,7 @@ class CallbackMixin:
 
         if asyncio.iscoroutine(check_target):
             return loop.create_task(target)  # type: ignore
-        elif asyncio.iscoroutinefunction(check_target):
+        elif inspect.iscoroutinefunction(check_target):
             return loop.create_task(target(*args))
         else:
             return loop.run_in_executor(None, target, *args)  # type: ignore
