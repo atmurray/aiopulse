@@ -15,7 +15,6 @@ readme = "README.md"
 license = {file = 'LICENSE'}
 requires-python = ">=3.10"
 dependencies = [
-    "async_timeout",
     "psutil",
 ]
 classifiers = [
