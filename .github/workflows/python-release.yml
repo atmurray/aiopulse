@@ -1,9 +1,8 @@
 name: Release to PyPI
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -30,9 +29,5 @@ jobs:
       run: pytest
     - name: Build package
       run: python -m build
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        generate_release_notes: true
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
