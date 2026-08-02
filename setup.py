@@ -5,7 +5,7 @@ from setuptools import setup
 setup(
     name="aiopulse",
     packages=["aiopulse"],
-    version="0.5.0",
+    version="0.5.1",
     license="apache-2.0",
     description="Python module for Rollease Acmeda Automate integration.",
     long_description=open("README.md").read(),
@@ -13,10 +13,10 @@ setup(
     author="Alan Murray",
     author_email="pypi@atmurray.net",
     url="https://github.com/atmurray/aiopulse",
-    download_url="https://github.com/atmurray/aiopulse/archive/v0.5.0.tar.gz",
+    download_url="https://github.com/atmurray/aiopulse/archive/v0.5.1.tar.gz",
     keywords=["automation"],
-    python_requires=">=3.10",
-    install_requires=["async_timeout"],
+    python_requires=">=3.12",
+    install_requires=[],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
