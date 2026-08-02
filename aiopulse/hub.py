@@ -5,8 +5,6 @@ import logging
 import warnings
 from collections.abc import AsyncGenerator, Callable
 
-import async_timeout
-
 # from aiopulse import Roller, Room, Scene, Timer
 import aiopulse
 import aiopulse.const as const
@@ -95,7 +93,7 @@ class Hub(CallbackMixin):
         retries = 3
 
         try:
-            async with async_timeout.timeout(timeout * retries):
+            async with asyncio.timeout(timeout * retries):
                 for _ in range(1):
                     discover_client.send(
                         const.HEADER + CommandType.DISCOVER.to_bytes(4, "big")
@@ -104,7 +102,7 @@ class Hub(CallbackMixin):
                     while True:
                         addr = None
                         try:
-                            async with async_timeout.timeout(timeout):
+                            async with asyncio.timeout(timeout):
                                 (response, addr) = await discover_client.receive()
                                 _LOGGER.debug(
                                     "%s: Received discover response: %s",
@@ -661,7 +659,7 @@ class Hub(CallbackMixin):
         while self.handshake.is_set():
             """Only catch exceptions that can be recovered from without reconnecting"""
             try:
-                async with async_timeout.timeout(30):
+                async with asyncio.timeout(30):
                     response = await self.get_response()
                 if len(response) > 0:
                     self.response_parse(response)
