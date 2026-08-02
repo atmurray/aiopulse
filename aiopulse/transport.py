@@ -40,7 +40,7 @@ class HubTransportUdp(HubTransportBase):
         """Constructor for UDP transport class."""
         self.host = host
         self.port = port
-        self.transport: asyncio.DatagramTransport | None = None  # pyright: ignore[reportAttributeAccessIssue]
+        self.transport: asyncio.DatagramTransport | None = None
         self.protocol: asyncio.DatagramProtocol | None = None
         self.is_udp: bool = True
         self.receive_queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = (
@@ -179,7 +179,7 @@ class HubTransportTcp(HubTransportBase):
 
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
-        self.transport: asyncio.Transport | None = None
+        self.transport: asyncio.BaseTransport | None = None
         self.protocol: asyncio.StreamReaderProtocol | None = None
         self.is_udp: bool = False
         self.connect_task: asyncio.Task[None] | None = None
@@ -192,11 +192,12 @@ class HubTransportTcp(HubTransportBase):
         self.protocol = asyncio.StreamReaderProtocol(self.reader)
 
         # The following blocks until a connection is made
-        self.transport, _ = await loop.create_connection(
+        writetransport, _ = await loop.create_connection(
             lambda: self, self.host or "", self.port
         )
+        self.transport = writetransport
         self.writer = asyncio.StreamWriter(
-            self.transport, self.protocol, self.reader, loop
+            writetransport, self.protocol, self.reader, loop
         )
 
     async def connect(self, host: str | None = None) -> None:
