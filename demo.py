@@ -5,7 +5,7 @@ import cmd
 import functools
 import inspect
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import aiopulse
@@ -60,9 +60,13 @@ class HubPrompt(cmd.Cmd):
             check_target = check_target.func
 
         if asyncio.iscoroutine(check_target):
-            task = self.event_loop.create_task(target)
+            # target is already a coroutine object
+            coro: Coroutine[Any, Any, Any] = target  # type: ignore[assignment]
+            task = self.event_loop.create_task(coro)
         elif inspect.iscoroutinefunction(check_target):
-            task = self.event_loop.create_task(target(*args))
+            # target is a coroutine function, call it to get coroutine object
+            coro = target(*args)  # type: ignore[assignment]
+            task = self.event_loop.create_task(coro)
         else:
             task = self.event_loop.run_in_executor(None, target, *args)
 
