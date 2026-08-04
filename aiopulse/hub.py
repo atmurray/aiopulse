@@ -72,72 +72,97 @@ class Hub(CallbackMixin):
 
     @staticmethod
     async def discover(  # type: ignore[misc]
-        timeout: int = 5,
-        loop: asyncio.events.AbstractEventLoop | None = None,
+        timeout: float = 5.0,
         bind_address: str | None = None,
     ) -> AsyncGenerator["Hub", None]:
         """Use a broadcast udp packet to find hubs on the lan.
 
         Args:
-            timeout: Timeout for each discovery attempt in seconds.
-            loop: Deprecated. The event loop to use.
+            timeout: Timeout for discovery in seconds.
             bind_address: Local interface to bind to (e.g., '10.0.0.24').
                          If None, binds to all interfaces.
         """
         discover_client = aiopulse.transport.HubTransportUdpBroadcast()
+        hub_queue: asyncio.Queue[Hub | None] = asyncio.Queue()
 
         await discover_client.connect(bind_address=bind_address)
 
-        hubs: dict[tuple[str, int], Hub] = {}
+        addrs_seen: set[tuple[str, int]] = set()
+        receive_task: asyncio.Task[None] | None = None
 
-        retries = 3
+        async def _receive_responses() -> None:
+            """Receive discover responses and start interrogation tasks."""
+            try:
+                while True:
+                    response, addr = await discover_client.receive()
+                    _LOGGER.debug(
+                        "%s: Received discover response: %s",
+                        addr[0],
+                        response.hex(),
+                    )
+
+                    if addr not in addrs_seen:
+                        addrs_seen.add(addr)
+                        _LOGGER.info(f"{addr[0]}: Discovered hub on port {addr[1]}")
+                        asyncio.create_task(_interrogate_and_queue(addr[0]))
+            except asyncio.CancelledError:
+                pass
+
+        async def _interrogate_and_queue(host: str) -> None:
+            """Interrogate a hub and put result in queue."""
+            hub = await Hub._interrogate_hub(host)
+            await hub_queue.put(hub)
 
         try:
-            async with asyncio.timeout(timeout * retries):
-                for _ in range(1):
-                    discover_client.send(
-                        const.HEADER + CommandType.DISCOVER.to_bytes(4, "big")
-                    )
-                    _LOGGER.info("Discovering hubs on the LAN...")
+            # Send discover broadcast
+            discover_client.send(const.HEADER + CommandType.DISCOVER.to_bytes(4, "big"))
+            _LOGGER.info("Discovering hubs on the LAN...")
+
+            # Start receive task
+            receive_task = asyncio.create_task(_receive_responses())
+
+            # Yield hubs as they complete interrogation
+            try:
+                async with asyncio.timeout(timeout):
                     while True:
-                        addr = None
-                        try:
-                            async with asyncio.timeout(timeout):
-                                (response, addr) = await discover_client.receive()
-                                _LOGGER.debug(
-                                    "%s: Received discover response: %s",
-                                    addr[0],
-                                    response.hex(),
-                                )
-                        except TimeoutError:
-                            pass
+                        hub = await hub_queue.get()
+                        if hub is not None:
+                            yield hub
+            except TimeoutError:
+                pass
 
-                        if addr and addr not in hubs:
-                            _LOGGER.info(f"{addr[0]}: Discovered hub on port {addr[1]}")
-                            hub: Hub | None = None
-                            try:
-                                hub = Hub(addr[0], loop)
-                                discover_client.send(
-                                    const.HEADER
-                                    + CommandType.DISCOVER.to_bytes(4, "big")
-                                )
-                                await hub.connect()
-                                await hub.disconnect()
-                                hubs[addr] = hub
-                                yield hub
-                            except errors.CannotConnectException:
-                                _LOGGER.warning(
-                                    f"{addr[0]}: Couldn't connect to discovered hub"
-                                )
-                            except errors.InvalidResponseException:
-                                _LOGGER.warning(
-                                    f"{addr[0]}: Couldn't interrogate discovered hub"
-                                )
-        except TimeoutError:
-            pass
-        _LOGGER.info("Discovery complete")
+        finally:
+            if receive_task:
+                receive_task.cancel()
+                try:
+                    await receive_task
+                except asyncio.CancelledError:
+                    pass
+            _LOGGER.info("Discovery complete")
+            await discover_client.close()
 
-        await discover_client.close()
+    @staticmethod
+    async def _interrogate_hub(host: str) -> "Hub | None":
+        """Connect to a discovered hub to get its info, then disconnect.
+
+        Args:
+            host: The hub's IP address.
+
+        Returns:
+            Hub instance if successful, None otherwise.
+        """
+        hub = Hub(host)
+        try:
+            await hub.connect()
+            await hub.disconnect()
+            return hub
+        except errors.CannotConnectException:
+            _LOGGER.warning(f"{host}: Couldn't connect to discovered hub")
+        except errors.InvalidResponseException as inst:
+            _LOGGER.warning(f"{host}: Couldn't interrogate discovered hub: {inst}")
+        except OSError as inst:
+            _LOGGER.warning(f"{host}: Connection error: {inst}")
+        return None
 
     async def connect(self, host: str | None = None) -> bool:
         """Try and connect to the hub."""
