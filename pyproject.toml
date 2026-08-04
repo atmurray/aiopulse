@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aiopulse"
-version = "0.5.2"
+version = "0.5.3"
 authors = [
   { name="Alan Murray", email="pypi@atmurray.net" },
 ]
@@ -61,7 +61,7 @@ select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["N818"]  # Exception naming - HubBaseException is already public API
 
 [tool.bumpver]
-current_version = "0.5.2"
+current_version = "0.5.3"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message  = "Bump version {old_version} -> {new_version}"
 commit          = true
