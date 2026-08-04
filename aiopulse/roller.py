@@ -103,6 +103,7 @@ class Roller(HubEntity):
             + utils.pack_int(percent, 2)
             + bytes.fromhex("ff")
         )
+        _LOGGER.info(f"{self.hub.host}:{self.name}: sending blind move to {percent}%")
         await self.hub.send_command(
             CommandType.MOVE_TO.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
@@ -117,6 +118,7 @@ class Roller(HubEntity):
             + bytes.fromhex("10")
             + bytes.fromhex("ff")
         )
+        _LOGGER.info(f"{self.hub.host}:{self.name}: sending blind up")
         await self.hub.send_command(
             CommandType.MOVE.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
@@ -131,6 +133,7 @@ class Roller(HubEntity):
             + bytes.fromhex("11")
             + bytes.fromhex("ff")
         )
+        _LOGGER.info(f"{self.hub.host}:{self.name}: sending blind stop")
         await self.hub.send_command(
             CommandType.MOVE.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
@@ -145,6 +148,7 @@ class Roller(HubEntity):
             + bytes.fromhex("12")
             + bytes.fromhex("ff")
         )
+        _LOGGER.info(f"{self.hub.host}:{self.name}: sending blind down")
         await self.hub.send_command(
             CommandType.MOVE.to_bytes(4, "big"), bytes.fromhex("2201"), message
         )
@@ -158,6 +162,7 @@ class Roller(HubEntity):
             + bytes.fromhex("410201000E4202010004")
             + bytes.fromhex("ff")
         )
+        _LOGGER.info(f"{self.hub.host}:{self.name}: sending health check")
         await self.hub.send_healthcheck(
             CommandType.GET_HEALTH.to_bytes(4, "big"), bytes.fromhex("2A01"), message
         )
