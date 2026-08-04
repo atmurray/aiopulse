@@ -697,7 +697,7 @@ class Hub(CallbackMixin):
         command_header = const.HEADER + command + bytes.fromhex("05") + self.topic
         length = len(data) + 1  # bytes.fromhex('0C00')
         buffer = command_header + utils.pack_int(length, 2) + data + checksum
-        _LOGGER.debug(f"Sending buffer {buffer.hex()}")
+        _LOGGER.debug(f"{self.host}: Sending buffer {buffer.hex()}")
 
         await self.command_lock.acquire()
 
