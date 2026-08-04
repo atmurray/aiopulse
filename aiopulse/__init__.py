@@ -1,4 +1,5 @@
 """Rollease Acmeda Automate Pulse asyncio protocol implementation."""
+
 import logging
 
 from aiopulse.const import UpdateType
@@ -26,7 +27,7 @@ __all__ = [
     "InvalidResponseException",
     "UpdateType",
 ]
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 __author__ = "Alan Murray"
 
 _LOGGER = logging.getLogger(__name__)
