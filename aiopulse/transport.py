@@ -222,7 +222,7 @@ class HubTransportTcp(HubTransportBase):
             if self.writer:
                 self.writer.close()
                 try:
-                    await asyncio.wait_for(self.writer.wait_closed(), timeout=2.0)
+                    await asyncio.wait_for(self.writer.wait_closed(), timeout=5.0)
                     _LOGGER.debug(f"{self.host}: TCP buffer cleared.")
                 except TimeoutError:
                     _LOGGER.warning(f"{self.host}: Timeout waiting for writer close, aborting")
