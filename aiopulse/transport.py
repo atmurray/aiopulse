@@ -217,12 +217,19 @@ class HubTransportTcp(HubTransportBase):
         await self.connect_task
 
     async def close(self) -> None:
-        """Close the connection."""
+        """Close the connection with bounded timeout."""
         try:
             if self.writer:
                 self.writer.close()
-                await self.writer.wait_closed()
-                _LOGGER.debug(f"{self.host}: TCP buffer cleared.")
+                try:
+                    await asyncio.wait_for(self.writer.wait_closed(), timeout=2.0)
+                    _LOGGER.debug(f"{self.host}: TCP buffer cleared.")
+                except TimeoutError:
+                    _LOGGER.warning(f"{self.host}: Timeout waiting for writer close, aborting")
+                    if self.transport and hasattr(self.transport, "abort"):
+                        self.transport.abort()
+                except OSError as inst:
+                    _LOGGER.warning(f"{self.host}: OSError during writer close: {inst}")
         except Exception as inst:
             _LOGGER.warning(f"{self.host}: Error closing writer cleanly: {inst}")
         finally:
