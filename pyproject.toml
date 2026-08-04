@@ -76,3 +76,6 @@ push            = false
 "setup.py" = [
     "{version}"
 ]
+"aiopulse/__init__.py" = [
+    '__version__ = "{version}"',
+]
