@@ -542,8 +542,6 @@ class Hub(CallbackMixin):
             )
             self.rollers[roller_id].health_updated()
             self.rollers[roller_id].notify_callback()
-        if self.health_lock.locked():
-            self.health_lock.release()
 
     def response_discover(self, message: bytes) -> None:
         """Receive after discover broadcast packet."""
@@ -742,21 +740,30 @@ class Hub(CallbackMixin):
             self.command_lock.release()
 
     async def send_healthcheck(
-        self, command: bytes, message_type: bytes, message: bytes
+        self, command: bytes, message_type: bytes, message: bytes, health_lock: asyncio.Lock
     ) -> None:
-        """Send payload to the hub."""
-        await self.health_lock.acquire()
+        """Send payload to the hub.
+
+        Health checks are low priority — if a command is already in flight,
+        skip this health check rather than queuing behind it.
+        """
+        # Skip if a regular command is already in flight to avoid blocking it
+        if self.command_lock.locked():
+            _LOGGER.debug(f"{self.host}: Skipping health check, command in flight")
+            return
+
+        await health_lock.acquire()
 
         await self.send_command(command, message_type, message)
 
         try:
-            await asyncio.wait_for(self.health_lock.acquire(), timeout=5.0)
+            await asyncio.wait_for(health_lock.acquire(), timeout=30.0)
 
         except TimeoutError:
             _LOGGER.warning(f"{self.host}: Health-check timed out.")
 
-        if self.health_lock.locked():
-            self.health_lock.release()
+        if health_lock.locked():
+            health_lock.release()
 
     async def run(self) -> None:
         """Start hub by connecting then awaiting for messages.

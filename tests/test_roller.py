@@ -124,3 +124,83 @@ class TestRoller:
         roller.health_task = MagicMock()
         roller.__del__()
         roller.health_task.cancel.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_health_updater_recovers_after_transient_error(self, roller):
+        """health_updater must not die permanently on hub disconnect errors."""
+        call_count = 0
+
+        async def get_health_flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise OSError("[Errno 113] Host is unreachable")
+            # Second call succeeds but we stop the loop via CancelledError
+            raise asyncio.CancelledError
+
+        roller.get_health = get_health_flaky
+
+        # Patch sleep so the 30s retry delay doesn't slow the test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            # Should return cleanly — CancelledError is handled internally
+            await roller.health_updater()
+
+        # get_health must have been called at least twice — once failing,
+        # once after the retry, proving the updater recovered
+        assert call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_health_updater_stops_cleanly_on_cancel(self, roller):
+        """CancelledError on get_health should stop the updater without raising."""
+        async def get_health_cancel():
+            raise asyncio.CancelledError
+
+        roller.get_health = get_health_cancel
+
+        # Should return cleanly, not propagate CancelledError
+        await roller.health_updater()
+
+    @pytest.mark.asyncio
+    async def test_health_updater_recovers_after_not_running_exception(self, roller):
+        """NotRunningException (hub stopped) should be treated as transient."""
+        from aiopulse.errors import NotRunningException
+
+        call_count = 0
+
+        async def get_health_not_running():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise NotRunningException("Hub not running")
+            raise asyncio.CancelledError
+
+        roller.get_health = get_health_not_running
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await roller.health_updater()
+
+        assert call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_health_updater_hourly_poll(self, roller):
+        """After initial health check, updater re-polls on 1h timeout."""
+        call_count = 0
+
+        async def get_health_counter():
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        roller.get_health = get_health_counter
+
+        # Simulate the 1h wait_for timing out immediately
+        async def fake_wait_for(coro, timeout):
+            coro.close()
+            raise TimeoutError
+
+        with patch("asyncio.wait_for", side_effect=fake_wait_for):
+            await roller.health_updater()
+
+        # Initial call + at least one hourly re-poll
+        assert call_count >= 2
