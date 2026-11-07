@@ -54,23 +54,55 @@ class Roller(HubEntity):
 
     async def health_updater(self) -> None:
         """Periodically update roller health."""
-        await self.get_health()
         running = True
-        try:
-            while running:
+        consecutive_failures = 0
+        MAX_BACKOFF = 3600  # cap at 1 hour
+
+        while running:
+            try:
+                await self.get_health()
+                # Wait for health_lock to be released by response_rollerhealth.
+                # If the hub responds, health_updated() releases the lock and we
+                # reset the failure count. If not, wait_for raises TimeoutError.
                 try:
-                    await asyncio.wait_for(self.health_lock.acquire(), timeout=3600)
+                    await asyncio.wait_for(self.health_lock.acquire(), timeout=30.0)
+                    # Response received — reset backoff and wait 1 hour before next poll
+                    consecutive_failures = 0
+                    while running:
+                        try:
+                            await asyncio.wait_for(
+                                self.health_lock.acquire(), timeout=MAX_BACKOFF
+                            )
+                        except TimeoutError:
+                            break  # time for next health check
+                        except asyncio.CancelledError:
+                            running = False
                 except TimeoutError:
-                    await self.get_health()
+                    # Hub did not respond — apply exponential backoff
+                    consecutive_failures += 1
+                    backoff = min(30 * (2 ** (consecutive_failures - 1)), MAX_BACKOFF)
+                    _LOGGER.debug(
+                        f"{self.hub.host}:{self.name}: health check no response "
+                        f"(attempt {consecutive_failures}), retrying in {backoff}s"
+                    )
+                    try:
+                        await asyncio.sleep(backoff)
+                    except asyncio.CancelledError:
+                        running = False
+            except asyncio.CancelledError:
+                running = False
+            except Exception as inst:
+                consecutive_failures += 1
+                backoff = min(30 * (2 ** (consecutive_failures - 1)), MAX_BACKOFF)
+                _LOGGER.warning(
+                    f"{self.hub.host}:{self.name}: health updater "
+                    f"transient error, will retry in {backoff}s: {inst}"
+                )
+                try:
+                    await asyncio.sleep(backoff)
                 except asyncio.CancelledError:
                     running = False
-        except Exception as inst:
-            _LOGGER.error(
-                f"{self.hub.host}:{self.name}: health updater "
-                f"unhandled exception: {inst}"
-            )
         _LOGGER.info(f"{self.hub.host}:{self.name}: health updater stopped")
-        running = False
 
     def __str__(self) -> str:
         """Returns string representation of roller."""
@@ -164,5 +196,5 @@ class Roller(HubEntity):
         )
         _LOGGER.info(f"{self.hub.host}:{self.name}: sending health check")
         await self.hub.send_healthcheck(
-            CommandType.GET_HEALTH.to_bytes(4, "big"), bytes.fromhex("2A01"), message
+            CommandType.GET_HEALTH.to_bytes(4, "big"), bytes.fromhex("2A01"), message, self.health_lock
         )

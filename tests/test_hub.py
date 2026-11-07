@@ -694,20 +694,49 @@ class TestHubSendHealthcheck:
         hub.running = True
         hub.handshake.set()
         hub.send_command = AsyncMock()
-        hub.health_lock = asyncio.Lock()
+        health_lock = asyncio.Lock()
 
-        async def release_health():
-            hub.health_lock.release()
-            return True
-
-        with patch.object(hub.health_lock, "acquire") as mock_acquire:
+        with patch.object(health_lock, "acquire") as mock_acquire:
             mock_acquire.side_effect = [True, TimeoutError]
             await hub.send_healthcheck(
                 CommandType.GET_HEALTH.to_bytes(4, "big"),
                 bytes.fromhex("2A01"),
                 b"\x00" * 10,
+                health_lock,
             )
             hub.send_command.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_send_healthcheck_per_roller_lock(self, hub, mock_transport):
+        """Each roller's health_lock is used independently, not a shared hub lock."""
+        hub.running = True
+        hub.handshake.set()
+        hub.send_command = AsyncMock()
+
+        lock1 = asyncio.Lock()
+        lock2 = asyncio.Lock()
+
+        with (
+            patch.object(lock1, "acquire") as mock_acquire1,
+            patch.object(lock2, "acquire") as mock_acquire2,
+        ):
+            mock_acquire1.side_effect = [True, TimeoutError]
+            mock_acquire2.side_effect = [True, TimeoutError]
+
+            await hub.send_healthcheck(
+                CommandType.GET_HEALTH.to_bytes(4, "big"),
+                bytes.fromhex("2A01"),
+                b"\x00" * 10,
+                lock1,
+            )
+            await hub.send_healthcheck(
+                CommandType.GET_HEALTH.to_bytes(4, "big"),
+                bytes.fromhex("2A01"),
+                b"\x00" * 10,
+                lock2,
+            )
+
+            assert hub.send_command.await_count == 2
 
 
 class TestHubRunStop:
